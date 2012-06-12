@@ -2,6 +2,7 @@ import uuid
 import pydot
 #import xml.etree.ElementTree as et
 from lxml import etree as et
+import os
 
 class TreeDefinedError(RuntimeError):
 	pass
@@ -28,9 +29,20 @@ class ExecJob:
 		}
 
 
-	def __init__(self, name="", jobpath="", tree=None):
+	def __init__(self, name="", jobpath="", tree=None, xml=None):
+		if xml is not None:
+			if xml.tag != "execJob":
+				#TODO exception
+				print("Error Tag is unmatched")
+				return
+			name = xml.attrib["name"]
+			jobpath = xml.attrib["jobpath"]
+			uuidi = uuid.UUID(xml.attrib["uuid"])
+		else:
+			uuidi = uuid.uuid4()
+
 		self.name = name
-		self.uuid = uuid.uuid4()
+		self.uuid = uuidi
 		self._tree = tree
 		self.jobpath = jobpath
 		if self.jobpath == "":
@@ -39,6 +51,7 @@ class ExecJob:
 			self.state = self.STATE_UNDEF
 		self._progress = -1
 		self.override = False
+			
 
 	def xml(self):
 		args = {"name":self.name, "uuid":self.uuid.hex, "jobpath":self.jobpath}
@@ -90,6 +103,11 @@ class ExecJob:
 				children.append(dep.child)
 		return children
 
+	def validate(self):
+		if os.path.exists(self.jobpath):
+		if not os.access(self.jobpath, os.X_OK):
+		
+
 class ExecDependency:
 	def __init__(self, parent, child, state=ExecJob.STATE_SUCCESSFULL):
 		self.parent = parent
@@ -114,14 +132,46 @@ class ExecDependency:
 
 class ExecTree:
 	def __init__(self, xml=None):
+		self.jobs = []
+		self.deps = []
 		if xml == None:
-			self.jobs = []
-			self.deps = []
 			self.uuid = uuid.uuid4()
 			self.name = ""
 			self.href = ""
+			self.cwd = "/"
 		else:
-			self._from_xml(xml)
+			if xml.tag != "execTree":
+				#TODO exception
+				print("Error Tag is unmatched")
+				return
+			if xml.attrib["version"] != "1.0":
+				#TODO exception
+				print("Error version not supported")
+				return
+			self.name = xml.attrib.get("name", "")
+			self.href = xml.attrib.get("href", "")
+			self.uuid = uuid.UUID(xml.attrib["uuid"])
+			self.exec_path = xml.attrib.get("cwd", "/")
+			#print("name:{0} href:{1} uuid:{2}".format(self.name, self.href, self.uuid))
+			for xmljob in xml.findall("execJob"):
+				self.jobs.append(ExecJob(tree=self, xml=xmljob))
+			for xmldep in xml.findall("execDependency"):
+				self.add_dep(xml=xmldep)
+
+	def xml(self):
+		args = {
+			"version":"1.0",
+			"name":self.name,
+			"href":self.href,
+			"uuid":self.uuid.hex,
+			"cwd":self.cwd
+		}
+		eti = et.Element("execTree", args)
+		for job in self.jobs:
+			eti.append(job.xml())
+		for dep in self.deps:
+			eti.append(dep.xml())
+		return eti
 
 	def __getitem__(self, key):
 		for job in self.jobs:
@@ -135,9 +185,12 @@ class ExecTree:
 		else:
 			return default
 
-	def find_job(self, name):
+	def find_job(self, needle):
+		""" Find job based on name or uuid """
 		for job in self.jobs:
-			if job.name == name:
+			if job.name == needle:
+				return job
+			elif job.uuid.hex == needle:
 				return job
 		return None
 
@@ -147,7 +200,15 @@ class ExecTree:
 		job.tree = self
 		self.jobs.append(job)
 
-	def add_dep(self, parent, child, state=ExecJob.STATE_SUCCESSFULL):
+	def add_dep(self, parent=None, child=None, state=ExecJob.STATE_SUCCESSFULL, xml=None):
+		if xml is not None:
+			if xml.tag != "execDependency":
+				#TODO exception
+				print("Error Tag is unmatched")
+				return
+			parent = xml.attrib["parent"]
+			child = xml.attrib["child"]
+			state = int(xml.attrib["state"])
 		#Ensure parent and child are ExecJobs
 		if not isinstance(parent, ExecJob):
 			parent = self.find_job(parent)
@@ -175,41 +236,6 @@ class ExecTree:
 		for dep in self.deps:
 			graph.add_edge(dep.dot_edge())
 		return graph
-
-	def xml(self):
-		args = {
-			"version":"1.0",
-			"name":self.name,
-			"href":self.href,
-			"uuid":self.uuid.hex
-		}
-		eti = et.Element("execTree", args)
-		for job in self.jobs:
-			eti.append(job.xml())
-		for dep in self.deps:
-			eti.append(dep.xml())
-		return eti
-
-	def _from_xml(self, xml):
-		#TODO here
-		if xml.tag != "execTree":
-			#TODO exception
-			print("Errror version not supported")
-			return
-		if xml.attrib["version"] != "1.0":
-			#TODO exception
-			print("Errror version not supported")
-			return
-		self.name = xml.attrib["name"]
-		self.href = xml.attrib["href"]
-		self.uuid = uuid.UUID(xml.attrib["uuid"])
-		print("name:{0} href:{1} uuid:{2}".format(self.name, self.href, self.uuid))
-		help(xml.find)
-		for job in xml.find("execJob"):
-			print(job.tag)
-			print("here0")
-		print("here1")
-
 
 	def stems(self):
 		""" WARNING This will not find stem of subtrees with cycles"""

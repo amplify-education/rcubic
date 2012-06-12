@@ -3,7 +3,8 @@
 from exectree import exectree
 import unittest
 import pydot
-import xml.etree.ElementTree as elemtree
+#import xml.etree.ElemeddntTree as elemtree
+from lxml import etree
 
 class TestET(unittest.TestCase):
 	def setUp(self):
@@ -84,9 +85,18 @@ class TestET(unittest.TestCase):
 
 
 	def test_xml(self):
-		xml  = self.tree.xml()
-		print(elemtree.dump(xml))
-		tree2 = exectree.ExecTree(xml)
+		""" xml export import export match """
+		tree1 = self.tree
+		xmltree1  = tree1.xml()
+		xmlstr1 = etree.tostring(xmltree1)
+
+		tree2 = exectree.ExecTree(xmltree1)
+		xmltree2 = tree2.xml()
+		xmlstr2 = etree.tostring(xmltree2)
+
+		print("tree1: {0}".format(xmlstr1))
+		print("tree2: {0}".format(xmlstr2))
+		self.assertEqual(xmlstr1, xmlstr2)
 
 if  __name__ == '__main__':
 	unittest.main()
