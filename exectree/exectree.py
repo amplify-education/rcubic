@@ -51,7 +51,7 @@ class ExecJob:
 			self.state = self.STATE_UNDEF
 		self._progress = -1
 		self.override = False
-			
+
 
 	def xml(self):
 		args = {"name":self.name, "uuid":self.uuid.hex, "jobpath":self.jobpath}
@@ -103,10 +103,15 @@ class ExecJob:
 				children.append(dep.child)
 		return children
 
-	def validate(self):
-		if os.path.exists(self.jobpath):
-		if not os.access(self.jobpath, os.X_OK):
-		
+	def validate(self, prepend=""):
+		errors=[]
+		if not os.path.exists(self.jobpath):
+			errors.append("{0}File {1} for needed by job {2} does not exist.".format(prepend, self.jobpath, self.name))
+		else:
+			if not os.access(self.jobpath, os.X_OK):
+				errors.append("{0}File {1} for needed by job {2} is not executable.".format(prepend, self.jobpath, self.name))
+		return errors
+
 
 class ExecDependency:
 	def __init__(self, parent, child, state=ExecJob.STATE_SUCCESSFULL):
@@ -151,7 +156,7 @@ class ExecTree:
 			self.name = xml.attrib.get("name", "")
 			self.href = xml.attrib.get("href", "")
 			self.uuid = uuid.UUID(xml.attrib["uuid"])
-			self.exec_path = xml.attrib.get("cwd", "/")
+			self.cwd = xml.attrib.get("cwd", "/")
 			#print("name:{0} href:{1} uuid:{2}".format(self.name, self.href, self.uuid))
 			for xmljob in xml.findall("execJob"):
 				self.jobs.append(ExecJob(tree=self, xml=xmljob))
@@ -269,12 +274,15 @@ class ExecTree:
 			cycles = not self.validate_nocycles(stem, visited)
 			if cycles:
 				errors.append("Tree has cycles.")
-		
+
 			#ensure that all jobs are connected
 			for job in self.jobs:
 				if job not in visited:
 					errors.append("Not all jobs are connected.")
 					break
+
+			for job in self.jobs:
+				errors.extend(job.validate())
 
 		return errors
 
