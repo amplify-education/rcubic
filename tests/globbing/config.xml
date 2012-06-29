@@ -1,0 +1,15 @@
+<?xml version="1.0"?>
+<wgr>
+	<config>
+	</config>
+	<release version="mc0.2.7">
+		<install group="release" version="mc0.2.7_rc1"/>
+		<install group="sfs" version="mc0.2.7_rc1"/>
+		<install group="globbing" version="mc0.2.7_rc1"/>
+		<install group="cdep" version="mc0.2.7_rc1"/>
+	</release>
+	<notification>
+		<product name="sfs" email="user@example.com"/>
+		<product name="release" email="user@example.com"/>
+	</notification>
+</wgr>

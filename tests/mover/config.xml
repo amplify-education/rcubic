@@ -1,0 +1,16 @@
+<?xml version="1.0"?>
+<!--#################################################-->
+<!--Tests the manual override functionality of RCubic-->
+<!--#################################################-->
+<wgr>
+	<config>
+	</config>
+	<release version="mc0.2.7">
+		<install group="release" version="mc0.2.7_rc1"/>
+		<install group="mover" version="mc0.2.7_rc1"/>
+	</release>
+	<notification>
+		<product name="mover" email="user@example.com"/>
+		<product name="release" email="user@example.com"/>
+	</notification>
+</wgr>

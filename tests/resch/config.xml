@@ -1,0 +1,16 @@
+<?xml version="1.0"?>
+<!--######################################################################-->
+<!--Test the reschedule functionality of RCubic, by "fixing" a bad script.-->
+<!--######################################################################-->
+<wgr>
+	<config>
+	</config>
+	<release version="mc0.2.7">
+		<install group="release" version="mc0.2.7_rc1"/>
+		<install group="resch" version="mc0.2.7_rc1"/>
+	</release>
+	<notification>
+		<product name="resch" email="user@example.com"/>
+		<product name="release" email="user@example.com"/>
+	</notification>
+</wgr>

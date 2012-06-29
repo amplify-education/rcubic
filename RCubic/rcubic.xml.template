@@ -1,0 +1,33 @@
+<?xml version="1.0"?>
+<wgr>
+	<config>
+		<option name="basePath" value="@@@workDir@@@"/>
+		<option name="archivePath" value="@@@workDir@@@/archive" />
+		<option name="hostListLocation" value="hostList"/>
+		<option name="gitRepo" value="http://git.example.com:8080/p/project"/>
+		<option name="gitBranch" value="master"/>
+		<option name="gerritURL" value="https://gerrit.example.com/" />
+		<option name="gerritProject" value="test.git" />
+		<option name="fileMode" value="False" />
+		<option name="environmentOptions" value="validate currentQA futureQA staging production"/>
+		<option name="specialGroups" value="release"/>
+		<option name="smtpServer" value="localhost"/>
+		<option name="emailSubjectPrefix" value="WGR:" />
+		<option name="emailFrom" value="user@example.com" />
+		<option name="maxEmailLogSizeKB" value="2" />
+		<option name="notification" value="True"/>
+		<option name="specialJobs" value="release_start.sh global_start.sh"/>
+		<option name="hijackPoint" value="release_start.sh"/>
+		<option name="listenAddress" value="localhost"/>
+		<option name="listenPortRange" value="31337-31347"/>
+		<option name="baseURL" value="http://localhost"/>
+		<option name="jobExpireTime" value="24"/>
+		<option name="defaultRelease" value="default"/>
+		<option name="environment" value="environment"/>
+		<!-- scriptregex defines things a script must match -->
+		<option name="scriptregex" value="^[^#]*source\s+\.\./(helper/wgrCommon\.sh|recipes/[^\s]*\.sh)"/>
+		<option name="SSLKey" value="server.key" />
+		<option name="SSLCert" value="server.crt" />
+		<option name="token" value="123" />
+	</config>
+</wgr>

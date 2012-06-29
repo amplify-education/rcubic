@@ -1,0 +1,228 @@
+<html>
+<head>
+<title>Rcubic (foo)</title>
+<link rel="stylesheet" type="text/css" href="css/vader/jquery-ui-1.8.21.custom.css" />
+<link rel="stylesheet" type="text/css" href="css/jquery.qtip.min.css" />
+<script type="text/javascript" src="js/jquery.min.js"></script>
+<script type="text/javascript" src="js/jquery.qtip.min.js"></script>
+<script type="text/javascript" src="js/jquery.ui.min.js"></script>
+
+<script type="text/javascript" src="js/syntax/shCore.js"></script>
+<link rel="stylesheet" type="text/css" href="css/syntax/shCore.css" />
+<script type="text/javascript" src="js/syntax/shBrushBash.js"></script>
+<link rel="stylesheet" type="text/css" href="css/syntax/shCoreFadeToGrey.css" />
+
+
+<!-- CSS overrides to make text/bars smaller -->
+<style>
+.ui-dialog .ui-dialog-titlebar {
+    height: 0.7em;
+    padding: .0em .2em .3em .4em;
+}
+.ui-dialog .ui-dialog-title {
+    font-size: 0.8em;
+    <!--margin: 0em 0em 0em 0em;-->
+}
+.tip-area {
+    font-size: 12px;
+}
+.log-text {
+    font-size: 12px;
+}
+
+.syntaxhighlighter {
+padding: 0 0 0 0;
+}
+
+.syntaxhighlighter a,
+.syntaxhighlighter div,
+.syntaxhighlighter code,
+.syntaxhighlighter table,
+.syntaxhighlighter table td,
+.syntaxhighlighter table tr,
+.syntaxhighlighter table tbody,
+.syntaxhighlighter table thead,
+.syntaxhighlighter table caption,
+.syntaxhighlighter textarea {
+overflow-x: hidden !important;
+overflow-y: hidden !important;
+overflow: hidden !important;
+}
+
+.ui-progressbar { height: 1em; }
+
+body div.qtip div.content {
+    padding: 0;
+    margin: 0;
+    height: auto;
+    width: 200px;
+}
+
+body {
+    background-color: #000;
+}
+</style>
+
+<script class="example" type="text/javascript">
+var scriptProgress = {};
+(function(){ // Import GET Vars
+   document.$_GET = [];
+   var urlHalves = String(document.location).split('?');
+   if(urlHalves[1]){
+      var urlVars = urlHalves[1].split('&');
+      for(var i=0; i<=(urlVars.length); i++){
+         if(urlVars[i]){
+            var urlVarPair = urlVars[i].split('=');
+            document.$_GET[urlVarPair[0]] = urlVarPair[1];
+         }
+      }
+   }
+})();
+
+<!--Get the folder prefix-->
+function getPrefix() {
+    return document.$_GET['prefix'];
+};
+
+<!-- Make a dialog -->
+function makeDialog() {
+    $("#dialog").dialog({
+        closeOnEscape: true,
+        draggable: true,
+        stack: true,
+        <!--hide: { effect: "explode" },-->
+        height: 300,
+        width: 800,
+        resizable: true,
+        position: "right top",
+    });
+};
+
+<!-- Bind to the links tooltip generated links to create dialogs -->
+$('a[id]').live("click",function(e) {
+    var id = $(this).attr('id');
+    var href = $(this).attr('href');
+    if(id != "code") {
+        e.preventDefault();
+    }
+    if(id == "log" || id == "codeView") {
+        $.ajax({
+            url: href,
+            cache: false,
+        }).done(function(data) {
+            $('.boxes').append('<div id="dialog" title="' + href + '"><div class="log-text"><pre class="brush: bash; toolbar: false; width: 800;">' + data + '</pre></div></div>');
+            makeDialog();
+            SyntaxHighlighter.highlight();
+        });
+    }
+});
+
+<!-- Bind to image map areas to create tooltops -->
+$('g.node').live("click",(function(e) {
+    var id = "code";
+    var href = $('> a', this).attr('xlink:href');
+    var title = $('> a', this).attr('xlink:title');
+    var cTitle = title.replace('.','\.');
+    e.preventDefault();
+    <!--Field for file mode-->
+    if(href.substring(0,4) != "http") {
+        href = getPrefix() + '/git/' + href;
+        id = "codeView";
+    }
+
+    $("a > ellipse", this)
+        .removeData('qtip')
+        .qtip({
+            content: {
+                text: '<div class="tip-area"><a id="' + id + '" href="' + href + '" target="_blank">Code</a> <br /> <a id="log" alt="' + title + '" href="'+getPrefix()+'/log/'+title+'.log">Log</a><br /><div id="meow"></div></div>',
+                title: {
+                    text: title,
+                    button: true,
+                },
+            },
+            position: {
+                at: 'center right',
+                my: 'top left',
+                viewport: $(window),
+                effect: false,
+            },
+            show : {
+                event: false,
+                ready: true,
+            },
+            hide : false,
+            style: {
+                widget: true
+            },
+            events: {
+                hide: function(event, api) {
+                    $('#ui-tooltip-'+api.id).remove();
+                }
+            }
+        });
+}));
+
+<!-- On document load, load the image file and create refresh -->
+function fillColors() {
+    $.getJSON(getPrefix()+'/nodes.json'+'?' + Math.round(new Date().getTime()),function(data) {
+        <!--Select all the nodes -->
+        $('.graph > .node').each(function(i,node) {
+            <!--Get script name-->
+            var script = $('title', node).text();
+            <!--Check if we have a color for it -->
+            if( data.hasOwnProperty(script)) {
+                $('a > ellipse', node).attr('fill', data[script]['status']);
+                $('a > ellipse', node).css('fill', data[script]['status']);
+                if(data[script]['progress'] >= 0) {
+                    if(!scriptProgress.hasOwnProperty(script)) {
+                        scriptProgress[script] = true;
+                        $('a > ellipse', node)
+                            .removeData('qtip')
+                            .qtip({
+                            id: 'progress_'+script,
+                            content: { 
+                                text: '<div id="progress_'+script+'" style="width: 150px;"></div>',
+                                title: { text: false, button: false}
+                            },
+                            position: {
+                                my: 'top center',
+                                at: 'bottom center'
+                            },
+                            show: { event: false, ready: true},
+                            hide: false,
+                            style: {
+                                widget: true
+                            }
+                        });
+                    }
+                            
+                    var name='#progress_'+script.replace('.','\\.');
+                    var tooltip='#ui-tooltip-progress_'+script.replace('.','\\.');
+                    if(data[script]['progress'] >= 100) {
+                        $(tooltip).remove();
+                    } else { 
+                        $(name).progressbar({value: data[script]['progress']});
+                    }
+                }
+            } else { <!-- No info, so gray it out -->
+                $('a > ellipse', node).attr('fill', "gray");
+            }
+        });
+    });
+};
+
+$(document).ready(function() {
+    $('#graph').load(getPrefix() + "/arb.svg", function() {fillColors();});
+    var refreshGraph = setInterval(function() {fillColors();}, 5000);
+});
+</script>
+</head>
+
+<body>
+<!-- image.html is refreshed into this div -->
+<div id="graph"></div>
+<!-- log dialog boxes --><br />
+<div id="boxes" class="boxes" title="Boxes"></div>
+<!--<div id="meow"></div>-->
+</body>
+</html>

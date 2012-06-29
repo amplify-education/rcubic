@@ -1,0 +1,1529 @@
+#!/usr/bin/python
+#camelCase tab indented, if unsure, read pep8 thanks
+# vim: ts=4 noet
+
+#TODO
+# * in session mode append random string to dir name
+# Fix fileMode config to not use gitRepo as path and rename vars
+
+from __future__ import print_function
+
+import sys
+import os
+import re
+import errno
+import fcntl
+import subprocess
+import time
+import argparse
+import threading
+import random
+import signal
+import sqlite3
+import os.path
+import smtplib
+import collections
+import logging
+import fnmatch
+import uuid
+import shutil
+import simplejson
+
+from email.mime.text import MIMEText
+#######
+from RCubic.RESTCommunicator import RESTCommunicator
+#######
+
+#third party libraries:
+from daemon import Daemon
+from lxml import etree
+import gevent
+from gevent import (event, server, socket)
+
+def setupLogging():
+	dpp12_time = '%Y-%m-%d %H:%M:%S' + str.format('{0:+06.2f}', float(time.altzone) / 3600).replace(".", "")
+	log_format = logging.Formatter('[%(asctime)s] | %(filename)s | %(process)d | %(levelname)s | %(message)s', datefmt=dpp12_time)
+	handler = logging.StreamHandler()
+	handler.setFormatter(log_format)
+	logger = logging.getLogger('')
+	logger.setLevel(logging.INFO)
+	#logger.setLevel(logging.DEBUG)
+	logger.addHandler(handler)
+setupLogging()
+
+def log_(logger, msg, level):
+	'''Log to a specified logger. Break strings into lines. Accepts liss.'''
+	if type(msg) is str or type(msg) is list:
+		if type(msg) is str:
+			lines = msg.splitlines()
+		elif type(msg) is list:
+			lines = msg
+		for line in lines:
+			logger.log(level, line)
+	else:
+		logger.log(level, msg)
+
+def log(msg, level=logging.WARNING):
+	log_(logging.getLogger(''), msg, level)
+
+def popenNonblock(args, data='', stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, cwd=None, logFile=None):
+	"""Communicate with the process non-blockingly.
+
+	If logFile is defined print the process's output line by line to that file
+	"""
+	if logFile:
+		f = open(logFile, 'a')
+		stdout = f
+		stderr = f
+	p = subprocess.Popen(args, stdin=stdin, stdout=stdout, stderr=stderr, cwd=cwd)
+	real_stdin = p.stdin if stdin == subprocess.PIPE else stdin
+	fcntl.fcntl(real_stdin, fcntl.F_SETFL, os.O_NONBLOCK)  # make the file nonblocking
+	real_stdout = p.stdout if stdout == subprocess.PIPE else stdout
+	fcntl.fcntl(real_stdout, fcntl.F_SETFL, os.O_NONBLOCK)	# make the file nonblocking
+
+
+	if data:
+		bytes_total = len(data)
+		bytes_written = 0
+		while bytes_written < bytes_total:
+			try:
+				# p.stdin.write() doesn't return anything, so use os.write.
+				bytes_written += os.write(p.stdin.fileno(), data[bytes_written:])
+			except IOError:
+				ex = sys.exc_info()[1]
+				if ex.args[0] != errno.EAGAIN:
+					raise
+				sys.exc_clear()
+			socket.wait_write(p.stdin.fileno())
+		p.stdin.close()
+
+	chunks = []
+	if stdout == subprocess.PIPE:
+		while True:
+			try:
+				chunk = p.stdout.read(4096)
+				if not chunk:
+					break
+				chunks.append(chunk)
+			except IOError:
+				ex = sys.exc_info()[1]
+				if ex[0] != errno.EAGAIN:
+					raise
+				sys.exc_clear()
+			socket.wait_read(p.stdout.fileno())
+		p.stdout.close()
+
+	output = ''.join(chunks)
+
+	while True:
+		returncode = p.poll()
+		if returncode is not None:
+			break
+		else:
+			gevent.sleep(1)
+
+	return (returncode, output)
+
+class ConfigurationError(Exception):
+	def __init__(self, value):
+		self.value = value
+
+	def __str__(self):
+		return repr(self.value)
+
+class Status(dict):
+	all = ("NONE", "QUEUED", "STARTED", "SUCCEEDED", "FAILED", "CANCELLED", "MANUALOVERRIDE")
+	NONE, QUEUED, STARTED, SUCCEEDED, FAILED, CANCELLED, MANUALOVERRIDE = all
+
+class FatalRuntimeError(Exception):
+	def __init__(self, value):
+		self.value = value
+
+	def __str__(self):
+		return repr(self.value)
+
+
+class ReleaseScriptManager(object):
+	def __init__(self, rcubic):
+		self.releaseScripts = []
+		self.specialJobs = []
+		self.gparentCompileSuccess = None
+		self.longestName = 0
+		self.groups = []
+		self.rcubic = rcubic
+
+	def __iter__(self):
+		return iter(self.releaseScripts)
+
+	def __str__(self):
+		str = "ReleaseScriptManager:\n"
+		for releaseScript in self.releaseScripts:
+			str += "\t%s\n" %(releaseScript)
+		return str
+
+	def remove(self, releaseScript):
+		try:
+			self.releaseScripts.remove(releaseScript)
+			return True
+		except KeyError:
+			return False
+
+	def add(self, releaseScript):
+		tmp = self.find(releaseScript.name)
+		if tmp:
+			self.remove(tmp)
+			log("overriding %s" %(releaseScript.name))
+			releaseScript.setOverride()
+		self.releaseScripts.append(releaseScript)
+		if len(releaseScript.name) > self.longestName:
+			self.longestName = len(releaseScript.name)
+
+	def findall(self, name, default=[]):
+		rval = [n.name for n in self.releaseScripts if fnmatch.fnmatchcase(n.name, name)]
+		if rval:
+			return rval
+		else:
+			return default
+
+	def find(self, name):
+		for releaseScript in self.releaseScripts:
+			if releaseScript.name == name:
+				return releaseScript
+		return None
+
+	def findPhase(self, phase):
+		rs = []
+		for releaseScript in self.releaseScripts:
+			if releaseScript.phase == phase:
+				rs.append(releaseScript.name)
+		return rs
+
+	def expandglobs(self):
+		for rs in self.releaseScripts:
+			for deps in [rs.sdep, rs.cdep]:
+				for dep in deps:
+					matches = self.findall(dep)
+					if matches:
+						deps.remove(dep)
+						deps.extend(matches)
+
+	def convertcdep(self):
+		"""Convert all cdeps to sdeps"""
+		for script in self.releaseScripts:
+			for cdep in script.cdep:
+				dep = self.find(cdep)
+				if dep is not None:
+					dep.sdep.append(script.name)
+
+	def inferParents(self):
+		#TODO remove outer loop, throw into dict.
+		for phase in ReleaseScript.Phase.all:
+			inferredParents = self.findPhase(ReleaseScript.Phase.prev(phase))
+			for script in self.releaseScripts:
+				if script.phase == phase:
+					script.idep.extend(inferredParents)
+
+	def addGroup(self, dir, group, version, phase, filter=None):
+		if filter is None:
+			filter = {}
+		count = 0
+		if not os.path.exists("%s/%s" %(dir, group)):
+			return count
+		for file in os.listdir("%s/%s" %(dir, group)):
+			if file.startswith("%s_" %(group)):
+				#if filter is set see if file is in either positive or negative filter and select it accordingly
+				if (not filter) \
+					or (filter["positiveFilter"] and file in filter["files"]) \
+					or (not filter["positiveFilter"] and file not in filter["files"]):
+					self.add(ReleaseScript("%s/%s/%s" %(dir, group, file), version, phase, self))
+					count += 1
+		self.groups.append(group)
+		return count
+
+	def toDot(self, url=None, basePathTrimLen=0, arborescent=False):
+		str = ""
+		for releaseScript in self.releaseScripts:
+			str += "%s\n" %(releaseScript.toDotNode(url, basePathTrimLen))
+		for releaseScript in self.releaseScripts:
+			str += "%s\n" %(releaseScript.toDotEdge(arborescent))
+		return "digraph G {\ngraph [bgcolor=transparent];\n%s}" %(str)
+
+	def toJSON(self):
+		nodes = { }
+		for releaseScript in self.releaseScripts:
+			name, color, progress = releaseScript.toJSONNode()
+			nodes[name] = {}
+			nodes[name]["status"] = color
+			nodes[name]["progress"] = progress
+		return simplejson.dumps(nodes)
+
+	def isDAG(self):
+		"""Checks to ensure scripts are arranged in Directed Acyclic Graph.
+		Cyclicality is tested by gparent compile so we just need to check that
+		graph is connected"""
+		firstJobs = []
+		for rs in self.releaseScripts:
+			if [dep for dep in rs.hdep + rs.sdep + rs.idep if self.find(dep)]:
+				#script has some 'active' dependencies.
+				rs.dagPass = True
+			else:
+				log("gparents of %s: %s" %(rs.name, rs.gparent), logging.DEBUG)
+				firstJobs.append(rs.name)
+				if rs.name in self.specialJobs:
+					rs.dagPass = True
+		if len(firstJobs) > 1:
+			log("DAG is disconnected. First jobs: %s" % firstJobs, logging.DEBUG)
+			return False
+		return True
+
+	def validate(self):
+		errorMessages = ""
+
+		for releaseScript in self.releaseScripts:
+			errorMessage = releaseScript.validate()
+			if errorMessage:
+				errorMessages += "%s" %(errorMessage)
+
+		if not self.gparentCompileSuccess:
+			errorMessages += "\tFailed recusion check for cycles in dependencies.\n"
+			#When we hit this state the other validation information is not very reliable
+
+		if len(self.specialJobs) == 0:
+			raise FatalRuntimeError("ERROR: special jobs must be set before validation")
+
+		if not self.isDAG():
+			errorMessages += "\tDAG is violated:\n"
+			for rs in self.releaseScripts:
+				if not rs.dagPass:
+					errorMessages += "\t\t%s\n" %rs.name
+
+		if errorMessages == "":
+			return True
+		else:
+			return errorMessages
+
+	def isDone(self):
+		for rs in self.releaseScripts:
+			if not rs.isDone():
+					return False
+		return True
+
+	def isSuccess(self):
+		for rs in self.releaseScripts:
+			if not rs.isSuccess():
+					return False
+		return True
+
+	def isGroupSuccess(self, group):
+		for rs in self.releaseScripts:
+			if rs.group == group:
+				if not rs.isSuccess():
+						return False
+		return True
+
+	def countGroups(self, excludes):
+		counted = []
+		for rs in self.releaseScripts:
+			if rs.group in counted:
+				continue
+			if rs.group in excludes:
+				continue
+			counted.append(rs.group)
+		return len(counted)
+
+	def gparentCompile(self):
+		try:
+			for rs in self.releaseScripts:
+				rs.gparentCompile()
+			self.gparentCompileSuccess = True
+			return True
+		except RuntimeError:
+			#Lazy mans cycle detection
+			self.gparentCompileSuccess = False
+			return False
+
+	def queueJobs(self):
+		for rs in self.releaseScripts:
+			rs.initEvents()
+		return [rs.queue for rs in self.releaseScripts]
+
+	def abortJobs(self):
+		for rs in self.releaseScripts:
+			if rs.status == Status.QUEUED:
+				rs.status = Status.CANCELLED
+			#we must clear all events to ensure jobs are flushed out
+			rs.event.set()
+
+#AKA AIS
+class ReleaseScript(object):
+	class Phase(dict):
+		all = ("EARLY", "DEFAULT", "LATE", "NONE")
+		EARLY, DEFAULT, LATE, NONE = all
+
+		@classmethod
+		def prev(cls, phase):
+			return cls.all[cls.all.index(phase)-1]
+
+	def __init__(self, script, version, phase, manager):
+		self.script = script
+		#TODO deps should be converted to a dict see adep()
+		self.hdep = [] #hard dependency
+		self.sdep = [] #soft dependency
+		self.idep = [] #inferred dependency
+		self.cdep = [] #child dependencies
+		self.gparent = []
+		self.products = []
+		self.override = False
+		self._status = Status.NONE
+		self.version = version
+		self.containsTrap = False
+		self.regexok = False
+		self.dagPass = None
+		self.validSyntax = None
+		self.isExecutable = False
+		self.group = ""
+		self.name = ""
+		self.progress = -1
+		self.phase = phase
+		self.monitoredEvents = []
+		self.event = gevent.event.Event()
+		self.stdout = ""
+		self.hasFailed = False
+		self.manager = manager
+		self.gitHead = ""
+		self.nodeColors = {Status.STARTED:'yellow', Status.SUCCEEDED:'green', Status.FAILED:'red', Status.CANCELLED:'blue', Status.MANUALOVERRIDE:'pink'}
+
+		regexName = re.compile("[^/]*$")
+		matchName = regexName.search(script)
+		if not matchName:
+			raise ConfigurationError("Error: Could not determine AIS name from '%s'." %(script))
+		else:
+			self.name = matchName.group(0)
+
+		regexGroup = re.compile("[^_]+")
+		matchGroup = regexGroup.search(self.name)
+		if not matchGroup:
+			raise ConfigurationError("Error: Could not determine the group to which '%s' belongs." %(self.name))
+		else:
+			self.group = matchGroup.group(0)
+
+		self.accessCheck()
+		self.parseScript()
+		self.syntaxCheck()
+
+	def __str__(self):
+		return "Script: %s (%s) depending on: %s %s %s" % (
+			self.name,
+			self.status,
+			" ".join(["(%s)" % dep for dep in self.sdep]),
+			" ".join(["[%s]" % dep for dep in self.idep]),
+			" ".join(["{%s}" % dep for dep in self.hdep])
+			)
+
+	def queue(self):
+		rcubic = self.manager.rcubic
+		if self.status == Status.SUCCEEDED:
+			return False
+
+		self.status = Status.QUEUED
+		self.stdout = ""
+
+		for event in self.monitoredEvents:
+			event.wait()
+
+		if self.status == Status.CANCELLED:
+			log("Cancelled job %s" % self.name, logging.INFO)
+			return False
+
+		self.gitHead = rcubic.gitHead
+		arguments = []
+		arguments.append(self.script)
+		arguments.append(self.version)
+		arguments.append(rcubic.environment)
+		arguments.append(self.script)
+		arguments.append(`rcubic.port`)
+
+		self.status = Status.STARTED
+		rcubic.refreshStatus(self)
+		rcode, self.stdout = popenNonblock(
+			arguments,
+			cwd=rcubic.releaseDir,
+			logFile="%s/work/log/%s.log" %((self.manager.rcubic.config["basePath"], self.name))
+			)
+
+		if rcode == 0:
+			self.status = Status.SUCCEEDED
+			rcubic.refreshStatus(self)
+			self.event.set()
+			return True
+		else:
+			self.status = Status.FAILED
+			rcubic.refreshStatus(self)
+			return False
+
+
+	def gparentCompile(self):
+		"""Finds all 'live' grandparents of a job and saves them to rs.gparent."""
+		#Not exactly efficient hash tables might help memory foot print.
+		deps = self.hdep + self.sdep + self.idep
+		if self.gparent:
+			return self.gparent + deps
+		else:
+			for parent in deps:
+				parent = self.manager.find(parent)
+				if parent:
+					for gparent in parent.gparentCompile():
+						if gparent in self.gparent:
+							continue
+						self.gparent.append(gparent)
+			return self.gparent + deps
+
+	def setOverride(self):
+		self.override = True
+
+	@property
+	def adep(self):
+		deps = dict()
+		deps.update(dict([(dep, 'hdep') for dep in self.hdep]))
+		deps.update(dict([(dep, 'sdep') for dep in self.sdep]))
+		deps.update(dict([(dep, 'idep') for dep in self.idep]))
+		return deps
+
+	def isDone(self):
+		if self.status in [ Status.SUCCEEDED, Status.FAILED, Status.CANCELLED, Status.MANUALOVERRIDE]:
+			return True
+		return False
+
+	def isSuccess(self):
+		if self.status in [ Status.SUCCEEDED, Status.MANUALOVERRIDE ]:
+			return True
+		return False
+
+	@property
+	def isFailed(self):
+		if self.status == Status.FAILED:
+			return True
+		return False
+
+	def updateProgress(self, progress):
+		try:
+			progress = int(progress)
+		except ValueError:
+			return False
+		if progress < 0:
+			return False
+		if progress > 100:
+			return False
+		if progress >= self.progress:
+			self.progress = progress
+			return True
+		return False
+
+	@property
+	def status(self):
+		return self._status
+
+	@status.setter
+	def status(self, status):
+		if status not in Status.all:
+			raise FatalRuntimeError("ERROR: Setting status to unknown value")
+		self._status = status
+		if self.isFailed:
+			self.hasFailed = True
+
+	def syntaxCheck(self):
+		with open("/dev/null", "w") as devnull:
+			process = subprocess.Popen(["bash", "-n", self.script], stdout=devnull, stderr=devnull)
+		self.validSyntax = process.wait() == 0
+		return self.validSyntax
+
+	#Preps a job to be run out of sequnce
+	#this proccess seems backwards. It seems like adding all the jobs first and deleting the ones that are not needed is more flexible
+	def hijack(self, hijackPoint):
+		for hdep in self.hdep:
+			if not self.manager.find(hdep):
+				self.hdep.remove(hdep)
+		#TODO There might be a smarter way to reset dependencies in the case of a hijack?
+		if not self.hdep and self.phase != self.Phase.EARLY :
+			self.hdep.append(hijackPoint)
+
+	def accessCheck(self):
+		self.isExecutable = os.access(self.script, os.X_OK)
+
+	def parseScript(self):
+		f = open(self.script)
+		script = f.read()
+
+		self.hdep = self._getHeader("HDEP", script)
+		self.sdep = self._getHeader("SDEP", script)
+		self.cdep = self._getHeader("CDEP", script)
+		self.products = self._getHeader("PRODUCT", script)
+
+		try:
+			phase = self._getHeader("PHASE", script)[0].upper()
+			if phase in ReleaseScript.Phase.all:
+				self.phase = phase
+		except IndexError:
+			pass
+
+		trapRe = re.compile("^[^#]*trap\s.*\s(EXIT|0)", re.MULTILINE)
+		if trapRe.search(script):
+			self.containsTrap = True
+
+		if "scriptregex" in self.manager.rcubic.config:
+			self.regexok = bool(
+				re.search(self.manager.rcubic.config["scriptregex"], script, re.MULTILINE)
+				)
+		f.close()
+
+	def _getHeader(self, header, script):
+		headerRe = re.compile("^[\s]*#%s:.*$" %(header), re.MULTILINE)
+		line = headerRe.search(script)
+		if line:
+			return self._parseHeaderLine(line.group(0))
+		else:
+			return []
+
+	def _parseHeaderLine(self, line):
+		begin = re.compile("^#[A-Z0-9]+:[\s]*")
+		seperator = re.compile("[,;\s]+")
+		retVal = seperator.split(begin.sub("", line, 1))
+		while True:
+			try:
+				retVal.remove("")
+			except ValueError:
+				break
+		return retVal
+
+	def toJSONNode(self):
+		color = "white"
+		if self.status in self.nodeColors:
+			color = self.nodeColors[self.status]
+		return (self.name, color, self.progress)
+
+	def toDotNode(self, url=None, basePathTrimLen=0):
+
+		str = "\t\"%s\" [style=\"filled\"" %(self.name)
+		if self.status in self.nodeColors:
+			str += ", fillcolor=\"%s\"" %(self.nodeColors[self.status])
+		else:
+			str += ", fillcolor=\"white\""
+
+		#if self.progress >= 0:
+			#str += ", label=\"%s\\n%d%%\"" %(self.name, self.progress)
+
+		if self.override:
+			str += ", color=\"blue\""
+
+		if url:
+			if self.manager.rcubic.config["fileMode"]:
+				str += ", href=\"%s/%s\"" %(self.manager.rcubic.config["basePath"][len(self.manager.rcubic.originalBasePath):], self.script[basePathTrimLen:])
+			else:
+				# If job hasn't started yet, guess to use the rcubic head
+				if(self.gitHead == ""):
+					gitHead = self.manager.rcubic.gitHead
+				else:
+					gitHead = self.gitHead
+				str += ", href=\"%s/gitweb?p=%s;a=blob;f=%s;hb=%s\"" % (self.manager.rcubic.config["gerritURL"],self.manager.rcubic.config["gerritProject"], self.script[basePathTrimLen:].lstrip('/'), gitHead)
+
+		str += "];"
+		return str
+
+	def toDotEdge(self, arborescent=False):
+		str=""
+		colors = {
+			'sdep' : {'undefnode':'gray', 'undefedge':'palegreen', 'node':'green'},
+			'idep' : {'undefnode':'gray', 'undefedge':'palegreen', 'node':'gold4'},
+			'hdep' : {'undefnode':'red', 'undefedge':'red', 'node':'blue'}
+		}
+		for dep, kind in self.adep.iteritems():
+			if arborescent:
+				if dep in self.gparent:
+					continue
+			if not self.manager.find(dep):
+					str += "\t\"%s\" [color=\"%s\"];" %(dep, colors[kind]['undefnode'])
+					str += "\t\"%s\" -> \"%s\" [color=\"%s\"];\n" %(dep, self.name, colors[kind]['undefedge'])
+			else:
+				str += "\t\"%s\" -> \"%s\" [color=\"%s\"];\n" %(dep, self.name, colors[kind]['node'])
+		return str
+
+	def validate(self):
+		str = ""
+		depCount = 0
+
+		if not self.isExecutable:
+			str += "\tThe script %s is not executable.\n" %(self.script)
+
+		if self.name == "":
+			str += "\tCannot determine name of %s\n" %(self.script)
+		if self.group == "":
+			str += "\tCannot determine group of %s\n" %(self.script)
+
+		if self.products == []:
+			str += "\tProduct name not defined in %s.\n" %(self.script)
+
+		#TODO: clean this code to use isDAG style
+		for hdep in self.hdep:
+			if not self.manager.find(hdep):
+				str += "\tcannot locate '%s', needed for '%s'\n" %(hdep, self.name)
+			else:
+				depCount += 1
+		for sdep in self.sdep:
+			if self.manager.find(sdep):
+				depCount += 1
+		if self.name not in self.manager.specialJobs:
+			if depCount <= 0:
+				str += "\t%s is an unrechable in phase.\n" %(self.name)
+
+		globex = re.compile(".*[][*?].*")
+		for hdep in self.hdep:
+			match = globex.search(hdep)
+			if match:
+				str += "\t%s contains globs in hdep: %s.\n" %(self.name, match.group(0))
+
+		if self.phase == ReleaseScript.Phase.NONE:
+			str += "\tPhase of job %s is not known.\n" %(self.name)
+		if self.containsTrap:
+			str += "\t%s contains it's own 'EXIT' trap.\n" %(self.name)
+		if not self.regexok:
+			str += "\t%s does not match required regex.\n" %(self.name)
+		if not self.validSyntax:
+			str += "\t%s does not pass syntax check.\n" %(self.name)
+		if str:
+			return str
+		else:
+			return None
+
+	def initEvents(self):
+		deps = []
+		for dep, kind in self.adep.iteritems():
+			if dep in self.gparent:
+				continue
+			depInst = self.manager.find(dep)
+			if depInst is not None:
+				self.monitoredEvents.append(depInst.event)
+			elif kind == "hdep":
+				raise FatalRuntimeError("ERROR: Unreachable hard dependency. At this phase it should be impossible")
+
+class LogToDB(object):
+	def __init__(self, dbPath):
+		self.dbPath = dbPath
+		newdb = (not os.path.exists(self.dbPath))
+		self.conn = sqlite3.connect(self.dbPath)
+		self.conn.isolation_level = None	# set to autocommit
+		if newdb:
+			self._initDB(self.conn)
+
+	def _initDB(self, conn):
+		query = "CREATE TABLE events (time integer, groupe text, version text, job text, status text, " \
+					" PRIMARY KEY (time, groupe, job, status))"
+		self.conn.execute(query)
+		query = "CREATE TABLE latest_events (time integer, groupe text, version text, job text, status text, " \
+					" FOREIGN KEY (time, groupe, job, status) REFERENCES event(time, groupe, job, status), " \
+					" UNIQUE (groupe, job))"
+		self.conn.execute(query)
+		self.conn.commit()
+
+	def saveStatus(self, group, version, status, job=Status.NONE):
+		if job.upper() == Status.NONE:
+			job = job.upper()
+		timestamp = int(time.time())
+		self.conn.execute("INSERT OR REPLACE INTO events VALUES (?,?,?,?,?)", (timestamp, group, version, str(job), status))
+		self.conn.execute("INSERT OR REPLACE INTO latest_events VALUES (?,?,?,?,?)", (timestamp, group, version, str(job), status))
+		self.conn.commit()
+		return True
+
+	def isNewestVersion(self, group, version):
+		"""Check if the latest group entry with status SUCCEEDED and job NONE is newer than version."""
+		query = "SELECT version FROM events WHERE groupe = ? AND JOB = ? AND status = ? ORDER BY time DESC LIMIT 1"
+		rows = list(self.conn.execute(query, (group, 'NONE', Status.SUCCEEDED)))
+		if rows:
+			return self.verComp(version, rows[0][0]) > 0
+		else:
+			return True
+
+	#def getUnfinished(self, group=None):
+	#	query = "SELECT * FROM latest_events WHERE status = ? "
+	#	if group:
+	#		result = self.conn.execute(query + " AND groupe = ? ", (Status.STARTED, group))
+	#	else:
+	#		result = self.conn.execute(query, (Status.STARTED,))
+	#	return list(result)
+
+
+	#def closeUnfinished(self, group, job):
+	#	#probably a good idea to log when ever this is run because it mucks with audit log
+	#	unfinishedEntries = self.getUnfinished(group)
+
+	#	for entry in unfinishedEntries:
+	#		if entry[3] == job:
+	#			self.saveStatus(entry[1], entry[2], Status.FAILED, entry[3])
+
+	#def getStatus(self, group, version, job=None):
+	#	"""Returns single most relavant 'Status' update matching criteria from arguments."""
+	#	query = "SELECT status FROM latest_events WHERE groupe = ? AND version = ? "
+	#	if job:
+	#		result = self.conn.execute(query + " AND job = ? ", (group, version, job))
+	#	else:
+	#		result = self.conn.execute(query, (group, version))
+	#	stati = [row[0] for row in result]
+	#	importance = [Status.FAILED, Status.QUEUED, Status.STARTED, Status.SUCCEEDED]
+	#	for imp in importance:
+	#		if imp in stati:
+	#			return imp
+	#	return "NONE"
+
+	@classmethod
+	def verComp(cls, a, b):
+		#-1 b greater
+		#0 same
+		#1 a greater
+		alphas = re.compile("[a-zA-Z]")
+		rev = re.compile("[-_~]")
+		dots = re.compile("[.,]")
+
+		a = re.sub(alphas, "", a)
+		a = rev.split(a, 1)
+		a[0] = dots.split(a[0])
+
+		b = re.sub(alphas, "", b)
+		b = rev.split(b, 1)
+		b[0] = dots.split(b[0])
+
+		while len(a[0]) < len(b[0]):
+			a[0].append(0)
+		while len(b[0]) < len(b[0]):
+			b[0].append(0)
+
+		for a1, b1 in zip(a[0], b[0]):
+			a1 = int(a1)
+			b1 = int(b1)
+			if a1 == b1:
+				continue
+			elif a1 > b1:
+				return 1
+			elif a1 < b1:
+				return - 1
+		if len(a) == len(b):
+			if len(a) == 1:
+				return 0
+			else:
+				return cls.verComp(a[1], b[1])
+		elif len(b) > len(a):
+			return 1
+		elif len(a) > len(b):
+			return - 1
+
+
+class RcubicNotification(object):
+	def __init__(self):
+		self.email = {}
+		self.enabled = True
+		self.emailFrom = 'RcubicNotify@example.com'
+		self.subject = "Rcubic:"
+		self.server = "localhost"
+		self.queue = collections.deque()
+		self.cc = ""
+
+	def disable(self):
+		if self.enabled == True:
+			log("Notifications have been disabled.", logging.DEBUG)
+		self.enabled = False
+
+	def addProductEmail(self, product, email):
+		self.email[product.lower()] = email
+
+	def isProductConfigured(self, product):
+		return product in self.email
+
+	def notifyProduct(self, products, subject, message):
+		if self.enabled:
+			self.queue.append((products, subject, message))
+
+	def _processMessage(self, products, subject, message):
+		msg = MIMEText(message)
+		recipients = [self.email[prod] for prod in products]
+		recipients.append(self.cc)
+		msg['Subject'] = "%s %s %s" %(self.subject, ", ".join(products), subject)
+		msg['From'] = self.emailFrom
+		msg['To'] = ', '.join(recipients)
+		smtp = smtplib.SMTP(self.server)
+		smtp.sendmail(self.emailFrom, recipients, msg.as_string())
+		smtp.quit()
+
+	def processQueue(self):
+		try:
+			while True:
+				self._processMessage(*self.queue.popleft())
+		except IndexError:
+			#queue is empty
+			pass
+
+class Rcubic(object):
+	def __init__(self, opts):
+		#Please don't abuse Rcubic.opts thanks!
+		self.opts = opts
+		self.toInstall = []
+		self.log = None
+		self.config = {}
+		self.port = 0
+		self.notification = RcubicNotification()
+		self.rsm = ReleaseScriptManager(self)
+		self.aisDir = ""
+		self.aisOverrideDir = ""
+		self.aisFilter = dict()
+		self.gitDir = ""
+		self.groupSelect = []
+		self.signalEvent = gevent.event.Event()
+		self.abortSent = False
+		self.environment = ""
+		# dot's html map output is: "x,y x,y x,y"
+		# but it should be: "x,y,x,y,x,y"
+		# this is a regex to fix that
+		self.fixCoord = re.compile(' (?=[\d]*,[\d]*)')
+		self.gitHead = ""
+		#Special groups are always selected, even if not passed through -g however they are not counted toward number of groups to install
+		#self.config["specialGroups"] = ["release"] #Now self.config["specialGroups"]
+		baseConfigReq = [ "basePath", "hostListLocation", "gitRepo", "fileMode", "gerritURL", "gerritProject",
+						  "environmentOptions", "specialGroups", "specialJobs",
+						  "listenAddress", "listenPortRange", "jobExpireTime",
+						  "smtpServer", "emailSubjectPrefix", "emailFrom", "maxEmailLogSizeKB",
+						  "defaultRelease", "hijackPoint", "SSLKey", "SSLCert", "token"]
+		splitOptions = ["specialGroups", "specialJobs"]
+
+		#calculate path to xml relative to rcubic python, this will make symlinking tricky
+		xmlpath = "%s/rcubic.xml" % sys.argv[0][0:sys.argv[0].rindex("/")]
+		self._readConfig(xmlpath, baseConfigReq)
+		self.config["gitRepo"] = [self.config["gitRepo"]]
+
+		self._initPaths()
+		self._initGit()
+		self._readConfig("%s/config.xml" %(self.releaseDir), splitOptions=splitOptions)
+
+		self.rsm.specialJobs = self.config["specialJobs"]
+
+		self._initNotification()
+
+		if self.opts.sessionMode:
+			self.log = LogToDB(":memory:")
+		else:
+			self.log = LogToDB(self.config["auditLog"])
+
+		try:
+			self._validate()
+		except:
+			self.cleanup()
+			raise
+
+		if self.opts.validate:
+			self.cleanup()
+
+	def _validate(self):
+		if self._readNotificationConfig() <= 0:
+			raise ConfigurationError("No notification configured. This is a bad thing")
+
+		#TODO validate aisOverrideDir and aisDir (do they exist?)
+		self._selectWhatToInstall()
+
+		if self.rsm.countGroups(self.config["specialGroups"]) <= 0:
+			raise ConfigurationError("ERROR: nothing to install")
+
+		if not self._verifyBasePath():
+			raise ConfigurationError("ERROR: basePath missmatch")
+
+		self.rsm.expandglobs()
+		self.rsm.convertcdep()
+		self.rsm.inferParents()
+		self.rsm.gparentCompile()
+
+		if self.opts.environment:
+			self.environment = self.opts.environment
+		elif "environment" in self.config:
+			self.environment = self.config["environment"]
+		else:
+			raise ConfigurationError("Environment not not specified.")
+
+		self._updateGraph(updateDot=True)
+
+		valid = self.validate()
+		if valid != True:
+			log("Validation failure:\n%s" %(valid), logging.ERROR)
+			raise ConfigurationError("Encountered Validation error. See above for cause of failure.")
+
+		if self.environment not in self.config["environmentOptions"]:
+			log("environmentOptions: %s" %self.config["environmentOptions"], logging.ERROR)
+			raise ConfigurationError("Invalid environment specified")
+
+		if not self._verifyNotificationGroups():
+			raise ConfigurationError("No notification configured. This is a bad thing")
+
+	def _initNotification(self):
+		self.notification.emailForm = self.config["emailFrom"]
+		self.notification.subject = self.config["emailSubjectPrefix"]
+		self.notification.server = self.config["smtpServer"]
+		self.notification.cc = self.config.get("cc", "")
+		if self.opts.foreground:
+			self.notification.disable()
+		if self.config.get("notification", "True") == "False":
+			self.notification.disable()
+
+	def _initGit(self):
+		if not self.config["fileMode"]:
+			if self.opts.refspec:
+				self.config["gitBranch"] = "FETCH_HEAD"
+			elif self.opts.branch:
+				self.config["gitBranch"] = self.opts.branch
+			elif "gitBranch" not in self.config:
+				self.config["gitBranch"] = "master"
+
+			try:
+				os.makedirs(self.gitDir)
+			except OSError:
+				pass
+		
+			try:
+				os.makedirs("%s/work/log" % (self.config["basePath"]))
+			except OSError:
+				pass
+
+			if not os.access(self.gitDir, os.W_OK):
+				raise FatalRuntimeError("ERROR: '%s' does not have write access." %self.gitDir)
+
+			with open("/dev/null", "w") as devnull:
+				if subprocess.call(["git","rev-parse","--is-inside-work-tree"], cwd=self.gitDir, stdout=devnull, stderr=devnull) == 0:
+					#Repo already exists we just need to updated
+					if self.opts.sessionMode:
+						raise FatalRuntimeError("'%s' already exists. This should be impossible." %(self.gitDir))
+				else:
+					try:
+						#repo does not exist and needs to be clone
+						if subprocess.call(['git', 'clone', self.config["gitRepo"][0], "%s" %(self.gitDir)]) != 0:
+							raise FatalRuntimeError("git clone failed")
+					except:
+						raise FatalRuntimeError("Cannot clone into directory. Is it not empty?")
+
+				#this is a safety to roll back any changes someone's made.
+				subprocess.call(['git', 'reset', '--hard'], cwd=self.gitDir)
+
+				#Lets fetch remote
+				fetchCommand = ['git', 'fetch', self.config["gitRepo"][0]]
+				if self.opts.refspec:
+					fetchCommand.append(self.opts.refspec)
+				if subprocess.call(fetchCommand, cwd=self.gitDir) != 0:
+					raise FatalRuntimeError("git fetch failed")
+
+				#checkout the target of which we work
+				if subprocess.call(['git', 'checkout', "remotes/origin/%s" % self.config['gitBranch']], cwd=self.gitDir) != 0:
+					raise FatalRuntimeError("git checkout failed 1")
+
+				processResult = popenNonblock(["git", "rev-parse","HEAD"], cwd=self.gitDir)
+				if(processResult[0] != 0):
+					raise FatalRuntimeError("git head hash get failed")
+				self.gitHead = processResult[1].rstrip()
+
+				#subprocess.call(['git', 'log', '-1', '--format="%H"'], cwd=self.gitDir, stdout=githash) #todo:save hash
+			log("Git repo has been updated")
+			return True
+		else:
+			# Copy the directory
+			try:
+				shutil.copytree(self.config["gitRepo"][0], self.gitDir)
+			except:
+				pass
+
+			try:
+				os.makedirs("%s/work/log" % (self.config["basePath"]))
+			except OSError:
+				pass
+
+			if not os.access(self.gitDir, os.W_OK):
+				raise FatalRuntimeError("ERROR: '%s' does not have write access." %self.gitDir)
+
+
+	def _flattenOption(self, inList):
+		outList = []
+		s = re.compile("[;,\s]+")
+		for subList in inList:
+			outList.extend(s.split(subList))
+		return outList
+
+	def _populateAISFilter(self):
+		self.aisFilter = dict()
+
+		if self.opts.ais and self.opts.skipAis:
+			log("conflicting options selected skip and select ais. Will honnor only select.")
+
+		if self.opts.ais:
+			self.aisFilter["positiveFilter"] = True
+			self.aisFilter["files"] = self._flattenOption(self.opts.ais)
+			self.aisFilter["files"].extend(self.config["specialJobs"])
+		elif self.opts.skipAis:
+			self.aisFilter["positiveFilter"] = False
+			self.aisFilter["files"] = self._flattenOption(self.opts.skipAis)
+
+	def _aisHijack(self):
+		for rs in self.rsm:
+			if rs.group not in self.config["specialGroups"]:
+				rs.hijack(self.config["hijackPoint"])
+
+	def _selectGroups(self):
+		if self.opts.group is not None:
+			self.groupSelect = self._flattenOption(self.opts.group)
+			self.groupSelect.extend(self.config["specialGroups"])
+
+	def _initPaths(self):
+		self.originalBasePath = self.config["basePath"]
+		self.config["archivePath"] = "%s/archive/" % (self.config["basePath"])
+		if self.opts.sessionMode:
+			if self.groupSelect != []:
+				groupDirString = self.groupSelect[0] #TODO properly implement 'group'.
+			else:
+				groupDirString = "all"
+			self.config["basePath"] = "%s/%s_%s" %(self.config["basePath"], uuid.uuid1(), groupDirString)
+
+		self.gitDir = "%s/work/git" %self.config["basePath"]
+		if self.opts.release:
+			self.config["defaultRelease"] = self.opts.release
+		self.releaseDir = "%s/%s" %(self.gitDir, self.config["defaultRelease"])
+		self.aisOverrideDir = "%s/override" %(self.releaseDir)
+		self.aisDir = "%s/release" %(self.gitDir)
+		self.validationDir = "%s/validation" %(self.gitDir)
+
+		if "baseURL" in self.config:
+			#self.fullURL = "%s/%s/work" %(self.config["baseURL"], self.config["basePath"][len(self.originalBasePath):])
+			tURL = self.config["basePath"][len(self.originalBasePath):]
+			if(len(tURL) > 0):
+				tURL = tURL + '/'
+			self.fullURL = "%s/?prefix=%swork" %(self.config["baseURL"], tURL)
+			self.baseURL = "%s/%s" %(self.config["baseURL"], self.config["basePath"][len(self.originalBasePath):])
+		log("URL: %s" % self.fullURL, logging.INFO)
+
+		fileMap = { "fdotFile":"full.dot", "fpngFile":"full.png", "adotFile":"arb.dot",
+					"asvgFile":"arb.svg", "pidFile":"rcubic.pid", "logFile":"rcubic.log",
+					"auditLog":"rcubic.aud" , "njsonFile": "nodes.json"}
+		for k, v in fileMap.iteritems():
+			self.config[k] = "%s/work/%s" %(self.config["basePath"], v)
+
+
+	def _readConfig(self, configFile, mustHaveConfigOptions=None, splitOptions=None):
+		if mustHaveConfigOptions is None:
+			mustHaveConfigOptions = []
+		if splitOptions is None:
+			splitOptions = []
+
+		try:
+			self.etree = etree.parse(configFile)
+		except IOError:
+			raise ConfigurationError("ERROR: Could not open configuration file (%s)." %(configFile))
+		except etree.XMLSyntaxError as error:
+			raise ConfigurationError("ERROR: failed to parse config file (%s): %s" %(configFile, error))
+
+		#TODO save config to local var and then copy values after tweaking
+		#TODO narrow /*/ to /rcubic after full rename
+		for element in self.etree.xpath("/*/config/option"):
+			try:
+				if element.attrib["name"] == "basePath" and "basePath" in self.config:
+					raise ConfigurationError("ERROR: basePath is being overriden in %s." %(configFile))
+				elif element.attrib["name"] in splitOptions:
+					self.config[element.attrib["name"]] = element.attrib["value"].split()
+				else:
+					self.config[element.attrib["name"]] = element.attrib["value"]
+			except KeyError:
+				self.config = {}
+				raise ConfigurationError("ERROR: Element on line %i of %s is missing an attribute." %(element.sourceline, element.base))
+
+		for mhco in mustHaveConfigOptions:
+			if mhco not in self.config:
+				raise ConfigurationError("ERROR: %s is not defined in config file (%s)" %(mhco, configFile))
+
+		#value validation does not belong in this function
+		if "listenPortRange" in self.config and "listenPortRange" in mustHaveConfigOptions:
+			listenPorts=[]
+			try:
+				for port in self.config["listenPortRange"].split('-'):
+					listenPorts.append(int(port.strip()))
+				if len(listenPorts) != 2:
+					raise ValueError
+				self.config["listenPortRange"] = ( listenPorts[0], listenPorts[1] )
+			except ValueError:
+				raise ConfigurationError("ERROR: port range specification error: %s" %(self.config["listenPortRange"]))
+
+		#value validation does not belong in this function
+		if "jobExpireTime" in self.config and "jobExpireTime" in mustHaveConfigOptions:
+			try:
+				self.config["jobExpireTime"] = int(self.config["jobExpireTime"])
+			except ValueError:
+				raise ConfigurationError("ERROR: jobExpireTime validation failure")
+
+		# String to bool
+		if "fileMode" in mustHaveConfigOptions:
+			if self.config["fileMode"].lower() == "true":
+				self.config["fileMode"] = True
+			elif self.config["fileMode"].lower() == "false":
+				self.config["fileMode"] = False
+			else:
+				raise ConfigurationError("ERROR: fileMode validation failure: expected True/False")
+
+		return True
+
+	def _selectWhatToInstall(self):
+		self._selectGroups()
+		self._populateAISFilter()
+		toInstallGroups=[]
+
+		for element in self.etree.xpath("/*/release/install"):
+			try:
+				version = element.attrib["version"]
+				group = element.attrib["group"]
+			except KeyError:
+				raise ConfigurationError("Element on line %i of %s is missing an attribute." %(element.sourceline, element.base))
+
+			phase = ReleaseScript.Phase.DEFAULT
+			if "phase" in element.attrib:
+				phase = element.attrib["phase"].upper()
+				if not phase in ReleaseScript.Phase.all:
+					raise ConfigurationError("Attribute phase on line %i of %s has unrecognized value: '%s'." %(element.sourceline, element.base, phase))
+
+			try:
+				fullOverride = element.attrib["fullOverride"]
+				if fullOverride.lower() == "true":
+					fullOverride = True
+				elif fullOverride.lower() == "false":
+					fullOverride = False
+				else:
+					raise ConfigurationError("Element fullOverride is not (True|False) on line %i of %s." %(element.sourceline, element.base))
+			except KeyError:
+				fullOverride = False
+
+			toInstall = False
+			if group in self.config["specialGroups"]:
+				toInstall = True
+			if self.groupSelect:
+				if group in self.groupSelect:
+					toInstall = True
+			else:
+				if self.log.isNewestVersion(group, version):
+					toInstall = True
+				else:
+					log("Skipping %s a version greater than or equal %s is installed." %(group, version))
+
+			installed = 0
+			if toInstall:
+				toInstallGroups.append(group)
+				if not fullOverride:
+					installed += self.rsm.addGroup(self.aisDir, group, version, phase, self.aisFilter)
+				installed += self.rsm.addGroup(self.aisOverrideDir, group, version, phase, self.aisFilter)
+				if installed <= 0:
+					raise ConfigurationError("No matching install scripts found for group: %s." %(group))
+
+		log("Installing groups %s." % " ".join(sorted(toInstallGroups)), logging.INFO)
+
+		if self.aisFilter:
+			self._aisHijack()
+
+		return True
+
+	def _readNotificationConfig(self):
+		count = 0
+		for product in self.etree.xpath("/*/notification/product"):
+			try:
+				self.notification.addProductEmail(product.attrib["name"], product.attrib["email"])
+			except KeyError:
+				log("Element on line %i of %s is missing an attribute." %(product.sourceline, product.base), logging.ERROR)
+				return 0
+			count += 1
+		return count
+
+	def _verifyNotificationGroups(self):
+		exit = True
+		for rs in self.rsm:
+			for product in rs.products:
+				if not self.notification.isProductConfigured(product):
+					exit = False
+					log("'%s' references notification group '%s' which is not defined" %(rs.script, product), logging.ERROR)
+		return exit
+
+	def _verifyBasePath(self):
+		for rs in self.rsm:
+			if not rs.script.startswith(self.config["basePath"]):
+				return False
+		return True
+
+	def reschedule(self, scriptName):
+		response = self.rsm.find(scriptName)
+		if not response:
+			print("TODO")
+			return False
+		gevent.spawn(response.queue)
+		return True
+
+	def manualOverride(self, scriptName):
+		response = self.rsm.find(scriptName)
+		if not response:
+			print("No such script")
+			return False
+		response.status = Status.MANUALOVERRIDE
+		self.refreshStatus(response)
+		response.event.set()
+		return True
+
+	def validate(self):
+		errorMessages = ""
+
+		#Validate and run validation scripts
+		if self.opts.strictValidation:
+			if os.path.exists(self.validationDir):
+				arguments = [ self.environment, self.opts.release, " ".join(self.rsm.groups) ]
+				prependRe = re.compile("^", re.M)
+				for validationScript in os.listdir(self.validationDir):
+					validationScript = "%s/%s" %(self.validationDir, validationScript)
+					if not os.access(validationScript, os.X_OK):
+						errorMessages += "\tValidation script %s is not executable\n" % (validationScript)
+						continue
+					with open("/dev/null", "w") as devnull:
+						process = subprocess.Popen(["bash", "-n", validationScript], stdout=devnull, stderr=devnull)
+					if process.wait() != 0:
+						errorMessages += "\tValidation script %s is not valid bash\n" % (validationScript)
+						continue
+					vsl = [validationScript]
+					vsl.extend(arguments)
+					process = subprocess.Popen(vsl, cwd = self.releaseDir, stdout = subprocess.PIPE, stderr = subprocess.PIPE )
+					if process.wait() != 0:
+						stdout, stderr = process.communicate()
+						if stdout or stdout:
+							errorMessages += "\tValidation script %s failed:\n" % (validationScript)
+						if stdout:
+							errorMessages += "\t\tstdout:\n"
+							errorMessages += prependRe.sub("\t\t\t", stdout.strip(), 0)
+							errorMessages += "\n"
+						if stderr:
+							errorMessages += "\t\tstderr:\n"
+							errorMessages += prependRe.sub("\t\t\t", stderr.strip(), 0)
+							errorMessages += "\n"
+
+		rsmErrorMessages = self.rsm.validate()
+		if rsmErrorMessages != True:
+			errorMessages += rsmErrorMessages
+
+		if errorMessages == "":
+			return True
+		else:
+			return errorMessages
+
+	def _updateGraph(self, updateDot=False):
+		log("Update graph called", logging.DEBUG)
+		try:
+			meta = [
+					#fullpng takes too long to render
+					#(self.config["fdotFile"], self.config["fpngFile"], self.config["fhtmlFile"], False),
+					(self.config["adotFile"], self.config["asvgFile"], self.config["njsonFile"], True)
+				   ]
+			for df, sf, jn, t in meta:
+				if updateDot:
+					with open(df, "w") as dotFD:
+						dotFD.write(self.rsm.toDot(self.baseURL, len(self.gitDir), t))
+					with open(sf, "w") as svgFD:
+						processResult = popenNonblock(["dot", "-Tsvg", df])
+						# Regex fix the coordinate space comma issue (look at fixCoord definition)
+						svgFD.write(self.fixCoord.sub(',', processResult[1]))
+					if processResult[0] != 0:
+						return False
+				with open(jn, "w") as jsonFD:
+					jsonFD.write(self.rsm.toJSON())
+
+			return True
+		except OSError:
+			raise FatalRuntimeError("ERROR: graphviz not installed.")
+			return False
+
+	def _updateProgress(self, scriptName, version, kind, message):
+		rs = self.rsm.find(scriptName)
+		if not rs:
+			log("received message with unmatched script. (%s, %s)" %(scriptName, version), logging.ERROR)
+			return False
+		if rs.version != version:
+			log("received message with unmatched version. (%s, %s)" %(scriptName, version), logging.ERROR)
+			return False
+		if kind == "PROGRESS":
+			if not rs.updateProgress(message):
+				log("received message with invalid progress message. (%s, %s, %s)" %(scriptName, version, message), logging.ERROR)
+				return False
+			self.signalEvent.set()
+		else:
+			log("received message with unknown message type (%s)." %(kind), logging.ERROR)
+			return False
+		return True
+
+	def refreshStatus(self, rs):
+		self.signalEvent.set()
+
+		self.log.saveStatus(rs.group, rs.version, rs.status, rs.name)
+		if rs.isDone() and self.rsm.isGroupSuccess(rs.group):
+			self.log.saveStatus(rs.group, rs.version, rs.status)
+			pass
+
+		if self.opts.sessionMode and rs.isFailed:
+			self.abort()
+
+		if rs.isFailed:
+			# Get last 'maxEmailLogSizeKB' kilobytes of log for email.
+			try:
+				logFile=open("%s/work/log/%s.log" %((self.manager.rcubic.config["basePath"], self.name)), 'r')
+				logFile.seek(0,2)
+				logSize = logFile.tell()
+				logFile.seek(max(-1024 * self.config['maxEmailLogSizeKB'], -logSize), 2)
+				logContent = logFile.read()
+			except:
+				logContent="ERROR opening log file!"
+			self.notification.notifyProduct(rs.products, "%s (%s) failed" %(rs.name, rs.version), logContent)
+		elif rs.hasFailed and rs.isSuccess():
+			self.notification.notifyProduct(rs.products, "%s (%s) recovered" %(rs.name, rs.version), "The script %s which has previously failed has now succeeded." % rs.name)
+
+	def abort(self, signum=None, frame=None):
+		#TODO: remove this and just call the RSM one
+		#signum and frame are needed as they are passed up from threading class.
+		if self.abortSent:
+			log("Abort already sent to all jobs.", logging.ERROR)
+			log("jobs: %s" % self.rsm, logging.DEBUG)
+			return
+		else:
+			self.abortSent = True
+
+		log("Aborting all jobs. Please be patient.", logging.INFO)
+		self.rsm.abortJobs()
+
+	def processEvents(self):
+		#We sleep here to give socket server some time to init
+		gevent.sleep(1)
+
+		expireTime = time.time() + 3600 * self.config["jobExpireTime"]
+		while self.communicator.started():
+				self.signalEvent.wait(10.0)
+				if self.signalEvent.is_set():
+					self.signalEvent.clear()
+					self._updateGraph()
+					self.notification.processQueue()
+				if self.opts.foreground:
+					if self.rsm.isDone():
+						break
+				else:
+					if self.rsm.isSuccess():
+						break
+				if time.time() > expireTime:
+					log("Tired of waiting for jobs to exit. Aborting.", logging.ERROR)
+					self.abort()
+					break
+		self.communicator.stop()
+	
+	def cleanup(self):
+		try:
+			uid = uuid.uuid1()
+			uDir = "%s/%s" % (self.config["archivePath"], uid)
+			os.makedirs(uDir)
+			for f in [ self.config['adotFile'], self.config['asvgFile'], self.config['njsonFile'] ]:
+				shutil.copy(f, uDir)
+			shutil.copytree("%s/%s" % (self.config["basePath"], "work/log"), "%s/%s" % (uDir,"log"))
+			log("Copied files to: %s" % (uDir), logging.INFO)
+
+			tURL = "archive/%s" % uid
+			if(len(tURL) > 0):
+				tURL = tURL + '/'
+			fullURL = "%s/?prefix=%s" %(self.config["baseURL"], tURL)
+			log("Job archive available at: %s" % (fullURL), logging.INFO)
+		except:
+			log("Something went wrong while trying to copy files to archive: %s" % (str(sys.exc_info())), logging.ERROR)
+
+		if self.opts.cleanup and self.opts.sessionMode:
+			try:
+				shutil.rmtree(self.config["basePath"], False)
+			except KeyError:
+				#assume base path is not configured.. which means we didn't write anything to it either
+				pass
+
+	def run(self):
+		time.sleep(1) #Sleep to let stdout get re-assigned on daemonization fork
+
+		#TODO: this is a hack
+		if self.opts.sessionMode:
+			self.log = LogToDB(":memory:")
+		else:
+			self.log = LogToDB(self.config["auditLog"])
+
+		self._updateGraph()
+		if self.config["SSLKey"] == "" or self.config["SSLCert"] == "":
+			self.config["SSLKey"] = None
+			self.config["SSLCert"] = None
+		if self.config["token"] == "":
+			self.config["token"] = None
+		
+		self.communicator = RESTCommunicator(self, bind=self.config["listenAddress"], portRange=self.config["listenPortRange"], SSLKey=self.config["SSLKey"], SSLCert=self.config["SSLCert"], token=self.config["token"])
+		self.port = self.communicator.port
+		rse = self.rsm.queueJobs() #release script event
+
+		jobs = [gevent.spawn(rsei) for rsei in rse]
+		jobs.extend([gevent.spawn(self.communicator.start,block=False), gevent.spawn(self.processEvents)])
+		# Starts non-blocking so we can get port
+		self.communicator.start(block=False)
+		log("Server started at %s:%s" % (self.communicator.bind, self.communicator.port), logging.INFO)
+		gevent.joinall(jobs)
+		time.sleep(5)
+		self._updateGraph(updateDot=True)
+		self.notification.processQueue()
+
+		self.cleanup()
+
+		if not self.rsm.isDone():
+			log("exited with orphaned jobs", logging.ERROR)
+			return False
+		return self.rsm.isSuccess()
+
+class RcubicDaemon(Daemon):
+	def setRcubic(self,rcubic):
+		self.rcubic = rcubic
+	def run(self):
+		self.rcubic.run()
+
+
+if __name__ == "__main__":
+	argParser = argparse.ArgumentParser(description='Rcubic does stuff! Important stuff!')
+	#argParser.add_argument('-p', dest='path', metavar='path', required=True, help='Base path of release.')
+	argParser.add_argument('-e', dest='environment', metavar='environmet', required=False, help='Environment options.')
+	argParser.add_argument('-r', dest='release', metavar='release_directory', required=False, help='Release. Number.')
+	argParser.add_argument('-g', dest='group', metavar='group', action='append',
+							help='Select Group to run. Can be specified multiple times for multiple groups.')
+	argParser.add_argument('-v', dest='validate', action='store_const', const=True, default=False, help='Validate configuration.')
+	argParser.add_argument('-f', dest='foreground', action='store_const', const=True, default=False,  help='Run in foreground (debug) mode.')
+	argParser.add_argument('-s', dest='sessionMode', action='store_const', const=True, default=False,  help='Run in Session mode.')
+	argParser.add_argument('-C', dest='cleanup', action='store_const', const=True, default=False, help='When in session mode, upon completion do not clean up work directory.')
+	argParser.add_argument('-a', dest='ais', metavar='ais_list', action='append', default=None,
+							help='Select a single AIS to run. Can be specified multiple times for multiple AIS. Do not use with -i.')
+	argParser.add_argument('-A', dest='skipAis', metavar='ais_list', action='append', default=None,
+							help='Select an AIS to skip. Can be specified multiple times for multiple AIS. Do not use with -a.')
+	argParser.add_argument('--strictValidation', dest='strictValidation', action='store_const', const=True, default=False, help='Strict validation configuration. Run validation scripts.')
+	argParser.add_argument('--refspec', dest='refspec', metavar='refspec', default=None,  help='refspec to fetch from, sets branch to FETCH_HEAD.')
+	argParser.add_argument('-b', dest='branch', metavar='branch', default=None, help='branch to checkout defaults to master unless --refspec is specified')
+	opts = argParser.parse_args()
+
+	try:
+		rcubic = Rcubic(opts)
+	except ConfigurationError as ce:
+		log(ce, logging.ERROR)
+		log("Encountered configuration error. See above for cause of failure.", logging.ERROR)
+		sys.exit(2)
+
+	if opts.validate:
+		log("Passed Validation!", logging.INFO) #This won't be reached if errors are found.
+		sys.exit(0)
+
+	signal.signal(signal.SIGTERM, rcubic.abort)
+	signal.signal(signal.SIGINT, rcubic.abort)
+
+	if opts.foreground:
+		if rcubic.run():
+			sys.exit(0)
+		else:
+			sys.exit(1)
+	else:
+		rcubicd = RcubicDaemon(rcubic.config["pidFile"], stdout=rcubic.config["logFile"], stderr=rcubic.config["logFile"])
+		rcubicd.setRcubic(rcubic)
+		rcubicd.start()
