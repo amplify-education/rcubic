@@ -205,7 +205,8 @@ function fillColors() {
                     }
                 }
             } else { <!-- No info, so gray it out -->
-                $('a > ellipse', node).attr('fill', "gray");
+                $('a > ellipse', node).attr('fill', 'gray');
+                $('a > ellipse', node).css('fill', 'gray');
             }
         });
     });
@@ -213,7 +214,7 @@ function fillColors() {
 
 $(document).ready(function() {
     $('#graph').load(getPrefix() + "/arb.svg", function() {fillColors();});
-    var refreshGraph = setInterval(function() {fillColors();}, 5000);
+    var refreshGraph = setInterval(function() {fillColors();}, 3000);
 });
 </script>
 </head>

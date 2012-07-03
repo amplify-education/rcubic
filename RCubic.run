@@ -1,6 +1,6 @@
 #!/usr/bin/python
 #camelCase tab indented, if unsure, read pep8 thanks
-# vim: ts=4 noet
+# vim: ts=4 noet filetype=python
 
 #TODO
 # * in session mode append random string to dir name
@@ -32,6 +32,7 @@ import simplejson
 from email.mime.text import MIMEText
 #######
 from RCubic.RESTCommunicator import RESTCommunicator
+from RCubic.ResourceScheduler import ResourceScheduler
 #######
 
 #third party libraries:
@@ -132,8 +133,8 @@ class ConfigurationError(Exception):
 		return repr(self.value)
 
 class Status(dict):
-	all = ("NONE", "QUEUED", "STARTED", "SUCCEEDED", "FAILED", "CANCELLED", "MANUALOVERRIDE")
-	NONE, QUEUED, STARTED, SUCCEEDED, FAILED, CANCELLED, MANUALOVERRIDE = all
+	all = ("NONE", "BLOCKED", "QUEUED", "STARTED", "SUCCEEDED", "FAILED", "CANCELLED", "MANUALOVERRIDE")
+	NONE, BLOCKED, QUEUED, STARTED, SUCCEEDED, FAILED, CANCELLED, MANUALOVERRIDE = all
 
 class FatalRuntimeError(Exception):
 	def __init__(self, value):
@@ -349,7 +350,7 @@ class ReleaseScriptManager(object):
 
 	def abortJobs(self):
 		for rs in self.releaseScripts:
-			if rs.status == Status.QUEUED:
+			if rs.status == Status.QUEUED or rs.status == status.BLOCKED:
 				rs.status = Status.CANCELLED
 			#we must clear all events to ensure jobs are flushed out
 			rs.event.set()
@@ -371,6 +372,7 @@ class ReleaseScript(object):
 		self.sdep = [] #soft dependency
 		self.idep = [] #inferred dependency
 		self.cdep = [] #child dependencies
+		self.resources = [] #needed resources
 		self.gparent = []
 		self.products = []
 		self.override = False
@@ -391,7 +393,7 @@ class ReleaseScript(object):
 		self.hasFailed = False
 		self.manager = manager
 		self.gitHead = ""
-		self.nodeColors = {Status.STARTED:'yellow', Status.SUCCEEDED:'green', Status.FAILED:'red', Status.CANCELLED:'blue', Status.MANUALOVERRIDE:'pink'}
+		self.nodeColors = {Status.STARTED:'yellow', Status.SUCCEEDED:'green', Status.FAILED:'red', Status.CANCELLED:'blue', Status.MANUALOVERRIDE:'pink', Status.BLOCKED:'brown'}
 
 		regexName = re.compile("[^/]*$")
 		matchName = regexName.search(script)
@@ -443,6 +445,10 @@ class ReleaseScript(object):
 		arguments.append(self.script)
 		arguments.append(`rcubic.port`)
 
+		self.status = Status.BLOCKED
+		rcubic.refreshStatus(self)
+		self.manager.rcubic.resourceScheduler.request(self.resources)
+
 		self.status = Status.STARTED
 		rcubic.refreshStatus(self)
 		rcode, self.stdout = popenNonblock(
@@ -451,6 +457,7 @@ class ReleaseScript(object):
 			logFile="%s/work/log/%s.log" %((self.manager.rcubic.config["basePath"], self.name))
 			)
 
+		self.manager.rcubic.resourceScheduler.release(self.resources)
 		if rcode == 0:
 			self.status = Status.SUCCEEDED
 			rcubic.refreshStatus(self)
@@ -557,6 +564,8 @@ class ReleaseScript(object):
 		self.hdep = self._getHeader("HDEP", script)
 		self.sdep = self._getHeader("SDEP", script)
 		self.cdep = self._getHeader("CDEP", script)
+		self.resources = self._getHeader("RESOURCES", script)
+		self.resources.append("default")
 		self.products = self._getHeader("PRODUCT", script)
 
 		try:
@@ -877,6 +886,7 @@ class Rcubic(object):
 		self.signalEvent = gevent.event.Event()
 		self.abortSent = False
 		self.environment = ""
+		self.resources = { }
 		# dot's html map output is: "x,y x,y x,y"
 		# but it should be: "x,y,x,y,x,y"
 		# this is a regex to fix that
@@ -884,7 +894,7 @@ class Rcubic(object):
 		self.gitHead = ""
 		#Special groups are always selected, even if not passed through -g however they are not counted toward number of groups to install
 		#self.config["specialGroups"] = ["release"] #Now self.config["specialGroups"]
-		baseConfigReq = [ "basePath", "hostListLocation", "gitRepo", "fileMode", "gerritURL", "gerritProject",
+		baseConfigReq = [ "basePath", "hostListLocation", "gitRepo", "fileMode", "gerritURL", "gerritProject", "archivePath", 
 						  "environmentOptions", "specialGroups", "specialJobs",
 						  "listenAddress", "listenPortRange", "jobExpireTime",
 						  "smtpServer", "emailSubjectPrefix", "emailFrom", "maxEmailLogSizeKB",
@@ -892,8 +902,13 @@ class Rcubic(object):
 		splitOptions = ["specialGroups", "specialJobs"]
 
 		#calculate path to xml relative to rcubic python, this will make symlinking tricky
-		xmlpath = "%s/rcubic.xml" % sys.argv[0][0:sys.argv[0].rindex("/")]
+		if(self.opts.conf == None):
+			xmlpath = "%s/rcubic.xml" % sys.argv[0][0:sys.argv[0].rindex("/")]
+		else:
+			xmlpath = self.opts.conf
+
 		self._readConfig(xmlpath, baseConfigReq)
+		self.resourceScheduler = ResourceScheduler(self.resources)
 		self.config["gitRepo"] = [self.config["gitRepo"]]
 
 		self._initPaths()
@@ -1131,6 +1146,19 @@ class Rcubic(object):
 			except KeyError:
 				self.config = {}
 				raise ConfigurationError("ERROR: Element on line %i of %s is missing an attribute." %(element.sourceline, element.base))
+
+		# Go through resources limit config
+		for element in self.etree.xpath("/*/resources/option"):
+			try:
+				resource = element.attrib["name"]
+				value = int(element.attrib["value"])
+				if value == -1:
+					value = float('inf')
+				self.resources[resource] = value
+			except ValueError:
+				raise ConfigurationError("ERROR: Resource on line %i of %s if not an int." % (element.sourceline, element.base))
+			except:
+				raise ConfigurationError("ERROR: Resource on line %i of %s is malformed." % (element.sourceline, element.base))
 
 		for mhco in mustHaveConfigOptions:
 			if mhco not in self.config:
@@ -1494,7 +1522,7 @@ if __name__ == "__main__":
 	argParser.add_argument('-v', dest='validate', action='store_const', const=True, default=False, help='Validate configuration.')
 	argParser.add_argument('-f', dest='foreground', action='store_const', const=True, default=False,  help='Run in foreground (debug) mode.')
 	argParser.add_argument('-s', dest='sessionMode', action='store_const', const=True, default=False,  help='Run in Session mode.')
-	argParser.add_argument('-C', dest='cleanup', action='store_const', const=True, default=False, help='When in session mode, upon completion do not clean up work directory.')
+	argParser.add_argument('-C', dest='cleanup', action='store_const', const=False, default=True, help='When in session mode, upon completion do not clean up work directory.')
 	argParser.add_argument('-a', dest='ais', metavar='ais_list', action='append', default=None,
 							help='Select a single AIS to run. Can be specified multiple times for multiple AIS. Do not use with -i.')
 	argParser.add_argument('-A', dest='skipAis', metavar='ais_list', action='append', default=None,
@@ -1502,6 +1530,7 @@ if __name__ == "__main__":
 	argParser.add_argument('--strictValidation', dest='strictValidation', action='store_const', const=True, default=False, help='Strict validation configuration. Run validation scripts.')
 	argParser.add_argument('--refspec', dest='refspec', metavar='refspec', default=None,  help='refspec to fetch from, sets branch to FETCH_HEAD.')
 	argParser.add_argument('-b', dest='branch', metavar='branch', default=None, help='branch to checkout defaults to master unless --refspec is specified')
+	argParser.add_argument('--conf', dest='conf', default=None, help='path to rcubic.xml config file. Default RCubic.run directory')
 	opts = argParser.parse_args()
 
 	try:
