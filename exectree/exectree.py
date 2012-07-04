@@ -2,10 +2,16 @@ import uuid
 import pydot
 #import xml.etree.ElementTree as et
 from lxml import etree as et
-from gevent import (event, Time)
+import gevent
+from gevent import (Greenlet, event, socket)
 import os
+import random
 from itertools import ifilter
 from operator import methodcaller
+import subprocess
+import fcntl
+import errno
+import sys
 
 class TreeDefinedError(RuntimeError):
 	pass
@@ -19,7 +25,7 @@ class DependencyError(RuntimeError):
 	pass
 
 
-class ExecJob:
+class ExecJob(Greenlet):
 	STATES = (0, 1, 2, 3, 4, 5)
 	STATE_IDLE, STATE_RUNNING, STATE_SUCCESSFULL, STATE_FAILED, STATE_CANCELLED, STATE_UNDEF = STATES
 	DEPENDENCY_STATES = [ STATE_SUCCESSFULL, STATE_FAILED ]
@@ -34,10 +40,11 @@ class ExecJob:
 			STATE_FAILED:"red",
 			STATE_CANCELLED:"blue",
 			STATE_UNDEF:"gray"
-		}
+	}
 
 
 	def __init__(self, name="", jobpath="", tree=None, xml=None):
+		Greenlet.__init__(self)
 		if xml is not None:
 			if xml.tag != "execJob":
 				#TODO exception
@@ -59,10 +66,11 @@ class ExecJob:
 			self.state = self.STATE_UNDEF
 		self._progress = -1
 		self.override = False
-		self.event = gevent.event.Event() 
+		self.event = gevent.event.Event()
 
 
 	def xml(self):
+		""" Generate xml Element object representing of ExecJob """
 		args = {"name":self.name, "uuid":self.uuid.hex, "jobpath":self.jobpath}
 		eti = et.Element("execJob", args)
 		return eti
@@ -91,6 +99,7 @@ class ExecJob:
 			self._progress = value
 
 	def dot_node(self):
+		""" Generate dot node object repersenting ExecJob """
 		if self.progress >= 0:
 			label = "{0}\n{1}".format(self.name, self.progress)
 		else:
@@ -118,7 +127,7 @@ class ExecJob:
 			if self == dep.parent:
 				deps.append(dep)
 		return deps
-	
+
 	def children(self):
 		return [dep.child for dep in self.child_deps()]
 
@@ -136,47 +145,126 @@ class ExecJob:
 
 	def is_done(self):
 		return self.state in ExecJob.DONE_STATES
-	
+
 	def is_set(self):
 		return self.event.is_set()
 
 	def is_success(self):
 		return self.state in ExecJob.SUCCESS_STATES
-	
+
 	def parent_events(self):
 		return [ej.event for ej in self.parents()]
-	
+
 	def may_start(self):
 		for dep in self.parent_deps():
-			if dep.state != pdep.parent.state:
+			if dep.state != dep.parent.state:
 				return False
-			else
-				if dep.nature = ExecDependency.SUFFICIENT_NATURE:
+			else:
+				if dep.nature == ExecDependency.SUFFICIENT_NATURE:
 					return True
 		return True
-	
+
+	def _parent_eselect_set(self, instance):
+		return self._waiter.set()
+
 	def parent_eselect(self, timeout=None):
-		waiter = Event()
-		for parent in self.parents:
-			parent.event.rawlink(waiter.set)
-		waiter.wait(timeout)
-		return ifilter(methodcaller('is_set'), parents)
-	
-	def queue(self):
+		self._waiter = gevent.event.Event()
+		for parent in self.parents():
+			parent.event.rawlink(self._parent_eselect_set)
+		self._waiter.wait(timeout)
+		#return ifilter(methodcaller('is_set'), parents)
+
+
+	@staticmethod
+	def _popen(args, data='', stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, cwd=None):
+		"""Communicate with the process non-blockingly.
+		http://code.google.com/p/gevent/source/browse/examples/processes.py?r=23469225e58196aeb89393ede697e6d11d88844b
+
+		This is to be obsoleted with gevent.spaw()
+		"""
+		p = subprocess.Popen(args, stdin=stdin, stdout=stdout, stderr=stderr, cwd=cwd)
+		real_stdin = p.stdin if stdin == subprocess.PIPE else stdin
+		fcntl.fcntl(real_stdin, fcntl.F_SETFL, os.O_NONBLOCK)  # make the file nonblocking
+		real_stdout = p.stdout if stdout == subprocess.PIPE else stdout
+		fcntl.fcntl(real_stdout, fcntl.F_SETFL, os.O_NONBLOCK)	# make the file nonblocking
+
+
+		if data:
+			bytes_total = len(data)
+			bytes_written = 0
+			while bytes_written < bytes_total:
+				try:
+					# p.stdin.write() doesn't return anything, so use os.write.
+					bytes_written += os.write(p.stdin.fileno(), data[bytes_written:])
+				except IOError:
+					ex = sys.exc_info()[1]
+					if ex.args[0] != errno.EAGAIN:
+						raise
+					sys.exc_clear()
+				socket.wait_write(p.stdin.fileno())
+			p.stdin.close()
+
+		if stdout == subprocess.PIPE:
+			while True:
+				try:
+					chunk = p.stdout.read(4096)
+					if not chunk:
+						break
+				except IOError, ex:
+					if ex[0] != errno.EAGAIN:
+						raise
+					sys.exc_clear()
+				socket.wait_read(p.stdout.fileno())
+			p.stdout.close()
+
+		#output = ''.join(chunks)
+
+		while True:
+			returncode = p.poll()
+			if returncode is not None:
+				break
+			else:
+				gevent.sleep(1)
+
+		return returncode
+
+	def _run(self):
 		if self.is_success():
 			return False
 
-		while not self.may_start(self):
-			self.parent_eselect(self)
+		while not self.may_start():
+			self.parent_eselect()
 
-		seconds = random.randrange(0, 100)
-		print("{0} started, will run for {1} seconds. ".format(self.name, seconds))
-		gevent.sleep(seconds)
-		print("{0} finised.".format(self.name))
-		self.state = self.STATE_SUCCESS
-		self.event.set()
-		
-		
+		#seconds = random.randrange(0, 100)
+		#print("{0} started, will run for {1} seconds. ".format(self.name, seconds))
+		#gevent.sleep(seconds)
+		#print("{0} finised.".format(self.name))
+
+		arguments = []
+		arguments.append(self.jobpath)
+		arguments.append(self.name)
+		#arguments.append(`rcubic.port`)
+
+		self.status = self.STATE_RUNNING
+		#rcubic.refreshStatus(self)
+		print("starting %s %s" % (self.name, arguments))
+		rcode = self._popen(
+			arguments,
+			cwd=self.tree.cwd,
+		)
+		print("finished %s" % (self.name))
+
+		if rcode == 0:
+			self.state = self.STATE_SUCCESSFULL
+			self.event.set()
+			return True
+		else:
+			self.state = self.STATE_FAILED
+			self.event.set()
+			return False
+
+
+
 class ExecDependency:
 	NATURES = (0, 1)
 	SUFFICIENT_NATURE, NECESSARY_NATURE = NATURES
@@ -192,20 +280,21 @@ class ExecDependency:
 
 		if nature is None:
 			#We accept None to make it easier to set/change default. 
-			nature = ExecDependency.NECESSARY_NATURE
+			self.nature = ExecDependency.NECESSARY_NATURE
 		elif nature in ExecDependency.NATURES:
 			self.nature = nature
 		else:
 			raise UnknownStateError("Unknown Nature")
 
 	def dot_edge(self):
+		""" Generate dot edge object repersenting dependency """ 
 		edge = pydot.Edge(self.parent.name, self.child.name)
 		if self.nature == ExecDependency.NECESSARY_NATURE:
 			if self.child.state == self.child.STATE_UNDEF:
 				edge.set("color", "green")
 			else:
 				edge.set("color", "blue")
-		else
+		else:
 			if self.child.state == self.child.STATE_UNDEF:
 				edge.set("color", "palegreen")
 			else:
@@ -213,6 +302,7 @@ class ExecDependency:
 		return edge
 
 	def xml(self):
+		""" Generate xml Element object representing the depedency """
 		args = {"parent":self.parent.uuid.hex, "child":self.child.uuid.hex, "state":`self.state`, "nature":`self.nature`}
 		eti = et.Element("execDependency", args)
 		return eti
@@ -227,6 +317,7 @@ class ExecTree:
 			self.name = ""
 			self.href = ""
 			self.cwd = "/"
+			self.workdir = "/tmp/{0}".format(self.uuid)
 		else:
 			if xml.tag != "execTree":
 				#TODO exception
@@ -266,8 +357,9 @@ class ExecTree:
 			if job.name == key:
 				return job
 
-	def find_jobs(self, name, default=[]):
-		rval = [n for n in self.jobs if fnmatch.fnmatchcase(n.name, name)]
+	def find_jobs(self, needle, default=[]):
+		""" Find all jobs based on their name / uuid """
+		rval = [n for n in self.jobs if fnmatch.fnmatchcase(n.name, needle) or n.name.uuid.hex == needle]
 		if rval:
 			return rval
 		else:
@@ -327,8 +419,12 @@ class ExecTree:
 		return graph
 
 	def stems(self):
-		""" WARNING This will not find stem of subtrees with cycles"""
-		stems = [] 
+		"""
+		Finds and returns first job of most unconnected graphs
+
+		WARNING This will not find stem of subtrees with cycles
+		"""
+		stems = []
 		for job in self.jobs:
 			orphan = True
 			for dep in self.deps:
@@ -372,6 +468,7 @@ class ExecTree:
 
 
 	def validate_nocycles(self, job, visited, parents=None):
+		""" Ensure we do not have cyclical dependencies in the tree """
 		if parents is None:
 			parents = []
 		#print("validate job: {0} (parents:{1} children:{2})".format(job.name, [v.name for v in parents], [c.name for c in job.children()]))
@@ -385,3 +482,16 @@ class ExecTree:
 				return False
 		parents.remove(job)
 		return True
+
+	def run(self):
+		print("About to spin up jobs")
+		#TODO this class is for testing only!!!!
+		for job in self.jobs:
+			job.start()
+		print("Jobs have been spun up. I'm gonna chill")
+		#gevent.sleep(5)
+		print("Chilling is done. Impatiently waiting for jobs to finish")
+		for job in self.jobs:
+			job.join()
+		print("Normalcy restored.")
+

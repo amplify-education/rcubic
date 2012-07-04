@@ -8,6 +8,8 @@ from lxml import etree
 import shutil
 import os
 import tempfile
+import stat
+import random
 
 class TestET(unittest.TestCase):
 	def setUp(self):
@@ -33,11 +35,13 @@ class TestET(unittest.TestCase):
 		"""
 		if vfile:
 			fd, path = tempfile.mkstemp(prefix=name, dir=self.workdir)
-			os.write(fd, "#!/bin/bash")
-			os.write(fd, "echo \"hello my name is {0}\"".format(name))
+			os.write(fd, "#!/bin/bash\n")
+			os.write(fd, "echo \"hello my name is {0}\"\n".format(name))
+			os.write(fd, "sleep \"{0}\"\n".format(random.randrange(0, 21)))
 			os.close(fd)
 			if vexec:
-				os.chmod(path, 755)
+				seven_five_five = stat.S_IRUSR | stat.S_IWUSR | stat.S_IXUSR | stat.S_IRGRP | stat.S_IXGRP | stat.S_IROTH | stat.S_IXOTH
+				os.chmod(path, seven_five_five)
 		else:
 			#we use a tmpdir so we can be reasonably sure this file does not exist..
 			path = "{0}/noexist_wh9oddaklj".format(self.workdir)
@@ -135,6 +139,9 @@ class TestET(unittest.TestCase):
 		job4 = self._newjob("fet", vexec=False)
 		self.tree.add_dep(self.job3, job4)
 		self.assertNotEqual(self.tree.validate(), [])
+
+	def test_execution(self):
+		self.tree.run()
 
 if  __name__ == '__main__':
 	unittest.main()
