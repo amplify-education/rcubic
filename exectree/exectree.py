@@ -2,7 +2,10 @@ import uuid
 import pydot
 #import xml.etree.ElementTree as et
 from lxml import etree as et
+from gevent import (event, Time)
 import os
+from itertools import ifilter
+from operator import methodcaller
 
 class TreeDefinedError(RuntimeError):
 	pass
@@ -15,10 +18,15 @@ class UnknownStateError(RuntimeError):
 class DependencyError(RuntimeError):
 	pass
 
+
 class ExecJob:
 	STATES = (0, 1, 2, 3, 4, 5)
 	STATE_IDLE, STATE_RUNNING, STATE_SUCCESSFULL, STATE_FAILED, STATE_CANCELLED, STATE_UNDEF = STATES
-	DEPENDENCY_STATES = [STATE_SUCCESSFULL, STATE_FAILED]
+	DEPENDENCY_STATES = [ STATE_SUCCESSFULL, STATE_FAILED ]
+	DONE_STATES = [ STATE_SUCCESSFULL, STATE_FAILED, STATE_CANCELLED ]
+	SUCCESS_STATES = [ STATE_SUCCESSFULL ]
+	ERROR_STATES = [ STATE_SUCCESSFULL, STATE_CANCELLED ]
+
 	STATE_COLORS = {
 			STATE_IDLE:"white",
 			STATE_RUNNING:"yellow",
@@ -51,6 +59,7 @@ class ExecJob:
 			self.state = self.STATE_UNDEF
 		self._progress = -1
 		self.override = False
+		self.event = gevent.event.Event() 
 
 
 	def xml(self):
@@ -96,15 +105,28 @@ class ExecJob:
 			node.set("href", "{0}{1}".format(self.tree.href,self.name))
 		return node
 
-	def children(self):
-		children = []
+	def parent_deps(self):
+		deps = []
+		for dep in self.tree.deps:
+			if self == dep.child:
+				deps.append(dep)
+		return deps
+
+	def child_deps(self):
+		deps = []
 		for dep in self.tree.deps:
 			if self == dep.parent:
-				children.append(dep.child)
-		return children
+				deps.append(dep)
+		return deps
+	
+	def children(self):
+		return [dep.child for dep in self.child_deps()]
+
+	def parents(self):
+		return [dep.parent for dep in self.parent_deps()]
 
 	def validate(self, prepend=""):
-		errors=[]
+		errors = []
 		if not os.path.exists(self.jobpath):
 			errors.append("{0}File {1} for needed by job {2} does not exist.".format(prepend, self.jobpath, self.name))
 		else:
@@ -112,25 +134,86 @@ class ExecJob:
 				errors.append("{0}File {1} for needed by job {2} is not executable.".format(prepend, self.jobpath, self.name))
 		return errors
 
+	def is_done(self):
+		return self.state in ExecJob.DONE_STATES
+	
+	def is_set(self):
+		return self.event.is_set()
 
+	def is_success(self):
+		return self.state in ExecJob.SUCCESS_STATES
+	
+	def parent_events(self):
+		return [ej.event for ej in self.parents()]
+	
+	def may_start(self):
+		for dep in self.parent_deps():
+			if dep.state != pdep.parent.state:
+				return False
+			else
+				if dep.nature = ExecDependency.SUFFICIENT_NATURE:
+					return True
+		return True
+	
+	def parent_eselect(self, timeout=None):
+		waiter = Event()
+		for parent in self.parents:
+			parent.event.rawlink(waiter.set)
+		waiter.wait(timeout)
+		return ifilter(methodcaller('is_set'), parents)
+	
+	def queue(self):
+		if self.is_success():
+			return False
+
+		while not self.may_start(self):
+			self.parent_eselect(self)
+
+		seconds = random.randrange(0, 100)
+		print("{0} started, will run for {1} seconds. ".format(self.name, seconds))
+		gevent.sleep(seconds)
+		print("{0} finised.".format(self.name))
+		self.state = self.STATE_SUCCESS
+		self.event.set()
+		
+		
 class ExecDependency:
-	def __init__(self, parent, child, state=ExecJob.STATE_SUCCESSFULL):
+	NATURES = (0, 1)
+	SUFFICIENT_NATURE, NECESSARY_NATURE = NATURES
+
+	def __init__(self, parent, child, state=ExecJob.STATE_SUCCESSFULL, nature=None):
 		self.parent = parent
 		self.child = child
+
 		if state in ExecJob.STATES:
 			self.state = state
 		else:
 			raise UnknownStateError("Unknown State")
+
+		if nature is None:
+			#We accept None to make it easier to set/change default. 
+			nature = ExecDependency.NECESSARY_NATURE
+		elif nature in ExecDependency.NATURES:
+			self.nature = nature
+		else:
+			raise UnknownStateError("Unknown Nature")
+
 	def dot_edge(self):
 		edge = pydot.Edge(self.parent.name, self.child.name)
-		if self.child.state == self.child.STATE_UNDEF:
-			edge.set("color", "palegreen")
-		else:
-			edge.set("color", "blue")
+		if self.nature == ExecDependency.NECESSARY_NATURE:
+			if self.child.state == self.child.STATE_UNDEF:
+				edge.set("color", "green")
+			else:
+				edge.set("color", "blue")
+		else
+			if self.child.state == self.child.STATE_UNDEF:
+				edge.set("color", "palegreen")
+			else:
+				edge.set("color", "paleblue")
 		return edge
 
 	def xml(self):
-		args = {"parent":self.parent.uuid.hex, "child":self.child.uuid.hex, "state":`self.state`}
+		args = {"parent":self.parent.uuid.hex, "child":self.child.uuid.hex, "state":`self.state`, "nature":`self.nature`}
 		eti = et.Element("execDependency", args)
 		return eti
 
@@ -205,7 +288,7 @@ class ExecTree:
 		job.tree = self
 		self.jobs.append(job)
 
-	def add_dep(self, parent=None, child=None, state=ExecJob.STATE_SUCCESSFULL, xml=None):
+	def add_dep(self, parent=None, child=None, state=ExecJob.STATE_SUCCESSFULL, nature=None, xml=None):
 		if xml is not None:
 			if xml.tag != "execDependency":
 				#TODO exception
@@ -214,6 +297,7 @@ class ExecTree:
 			parent = xml.attrib["parent"]
 			child = xml.attrib["child"]
 			state = int(xml.attrib["state"])
+			nature = int(xml.attrib["nature"])
 		#Ensure parent and child are ExecJobs
 		if not isinstance(parent, ExecJob):
 			parent = self.find_job(parent)
@@ -231,7 +315,7 @@ class ExecTree:
 				except TreeDefinedError:
 					raise JobUndefinedError("Job {0} is not part of the tree {1}".format(k, tree))
 
-		dep = ExecDependency(parent, child, state)
+		dep = ExecDependency(parent, child, state, nature)
 		self.deps.append(dep)
 
 	def dot_graph(self):
