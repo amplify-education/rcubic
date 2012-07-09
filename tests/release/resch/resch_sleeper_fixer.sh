@@ -7,5 +7,5 @@ source ../helper/common.sh
 
 sleep 15
 rm 'badFile'
-rescheduleScript.py --port 31337 --addr localhost --token 123 --script resch_fail.sh
+rescheduleScript.py --port $4 --addr localhost --script resch_fail.sh $5
 exit 0

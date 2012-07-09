@@ -33,6 +33,8 @@ from email.mime.text import MIMEText
 #######
 from RCubic.RESTCommunicator import RESTCommunicator
 from RCubic.ResourceScheduler import ResourceScheduler
+from RCubic.ReleaseScript import Status, ReleaseScriptManager, ReleaseScript
+from RCubic.RCubicUtilities import log, popenNonblock, ConfigurationError, FatalRuntimeError, LogToDB
 #######
 
 #third party libraries:
@@ -40,789 +42,6 @@ from daemon import Daemon
 from lxml import etree
 import gevent
 from gevent import (event, server, socket)
-
-def setupLogging():
-	dpp12_time = '%Y-%m-%d %H:%M:%S' + str.format('{0:+06.2f}', float(time.altzone) / 3600).replace(".", "")
-	log_format = logging.Formatter('[%(asctime)s] | %(filename)s | %(process)d | %(levelname)s | %(message)s', datefmt=dpp12_time)
-	handler = logging.StreamHandler()
-	handler.setFormatter(log_format)
-	logger = logging.getLogger('')
-	logger.setLevel(logging.INFO)
-	#logger.setLevel(logging.DEBUG)
-	logger.addHandler(handler)
-setupLogging()
-
-def log_(logger, msg, level):
-	'''Log to a specified logger. Break strings into lines. Accepts liss.'''
-	if type(msg) is str or type(msg) is list:
-		if type(msg) is str:
-			lines = msg.splitlines()
-		elif type(msg) is list:
-			lines = msg
-		for line in lines:
-			logger.log(level, line)
-	else:
-		logger.log(level, msg)
-
-def log(msg, level=logging.WARNING):
-	log_(logging.getLogger(''), msg, level)
-
-def popenNonblock(args, data='', stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, cwd=None, logFile=None):
-	"""Communicate with the process non-blockingly.
-
-	If logFile is defined print the process's output line by line to that file
-	"""
-	if logFile:
-		f = open(logFile, 'a')
-		stdout = f
-		stderr = f
-	p = subprocess.Popen(args, stdin=stdin, stdout=stdout, stderr=stderr, cwd=cwd)
-	real_stdin = p.stdin if stdin == subprocess.PIPE else stdin
-	fcntl.fcntl(real_stdin, fcntl.F_SETFL, os.O_NONBLOCK)  # make the file nonblocking
-	real_stdout = p.stdout if stdout == subprocess.PIPE else stdout
-	fcntl.fcntl(real_stdout, fcntl.F_SETFL, os.O_NONBLOCK)	# make the file nonblocking
-
-
-	if data:
-		bytes_total = len(data)
-		bytes_written = 0
-		while bytes_written < bytes_total:
-			try:
-				# p.stdin.write() doesn't return anything, so use os.write.
-				bytes_written += os.write(p.stdin.fileno(), data[bytes_written:])
-			except IOError:
-				ex = sys.exc_info()[1]
-				if ex.args[0] != errno.EAGAIN:
-					raise
-				sys.exc_clear()
-			socket.wait_write(p.stdin.fileno())
-		p.stdin.close()
-
-	chunks = []
-	if stdout == subprocess.PIPE:
-		while True:
-			try:
-				chunk = p.stdout.read(4096)
-				if not chunk:
-					break
-				chunks.append(chunk)
-			except IOError:
-				ex = sys.exc_info()[1]
-				if ex[0] != errno.EAGAIN:
-					raise
-				sys.exc_clear()
-			socket.wait_read(p.stdout.fileno())
-		p.stdout.close()
-
-	output = ''.join(chunks)
-
-	while True:
-		returncode = p.poll()
-		if returncode is not None:
-			break
-		else:
-			gevent.sleep(1)
-
-	return (returncode, output)
-
-class ConfigurationError(Exception):
-	def __init__(self, value):
-		self.value = value
-
-	def __str__(self):
-		return repr(self.value)
-
-class Status(dict):
-	all = ("NONE", "BLOCKED", "QUEUED", "STARTED", "SUCCEEDED", "FAILED", "CANCELLED", "MANUALOVERRIDE")
-	NONE, BLOCKED, QUEUED, STARTED, SUCCEEDED, FAILED, CANCELLED, MANUALOVERRIDE = all
-
-class FatalRuntimeError(Exception):
-	def __init__(self, value):
-		self.value = value
-
-	def __str__(self):
-		return repr(self.value)
-
-
-class ReleaseScriptManager(object):
-	def __init__(self, rcubic):
-		self.releaseScripts = []
-		self.specialJobs = []
-		self.gparentCompileSuccess = None
-		self.longestName = 0
-		self.groups = []
-		self.rcubic = rcubic
-
-	def __iter__(self):
-		return iter(self.releaseScripts)
-
-	def __str__(self):
-		str = "ReleaseScriptManager:\n"
-		for releaseScript in self.releaseScripts:
-			str += "\t%s\n" %(releaseScript)
-		return str
-
-	def remove(self, releaseScript):
-		try:
-			self.releaseScripts.remove(releaseScript)
-			return True
-		except KeyError:
-			return False
-
-	def add(self, releaseScript):
-		tmp = self.find(releaseScript.name)
-		if tmp:
-			self.remove(tmp)
-			log("overriding %s" %(releaseScript.name))
-			releaseScript.setOverride()
-		self.releaseScripts.append(releaseScript)
-		if len(releaseScript.name) > self.longestName:
-			self.longestName = len(releaseScript.name)
-
-	def findall(self, name, default=[]):
-		rval = [n.name for n in self.releaseScripts if fnmatch.fnmatchcase(n.name, name)]
-		if rval:
-			return rval
-		else:
-			return default
-
-	def find(self, name):
-		for releaseScript in self.releaseScripts:
-			if releaseScript.name == name:
-				return releaseScript
-		return None
-
-	def findPhase(self, phase):
-		rs = []
-		for releaseScript in self.releaseScripts:
-			if releaseScript.phase == phase:
-				rs.append(releaseScript.name)
-		return rs
-
-	def expandglobs(self):
-		for rs in self.releaseScripts:
-			for deps in [rs.sdep, rs.cdep]:
-				for dep in deps:
-					matches = self.findall(dep)
-					if matches:
-						deps.remove(dep)
-						deps.extend(matches)
-
-	def convertcdep(self):
-		"""Convert all cdeps to sdeps"""
-		for script in self.releaseScripts:
-			for cdep in script.cdep:
-				dep = self.find(cdep)
-				if dep is not None:
-					dep.sdep.append(script.name)
-
-	def inferParents(self):
-		#TODO remove outer loop, throw into dict.
-		for phase in ReleaseScript.Phase.all:
-			inferredParents = self.findPhase(ReleaseScript.Phase.prev(phase))
-			for script in self.releaseScripts:
-				if script.phase == phase:
-					script.idep.extend(inferredParents)
-
-	def addGroup(self, dir, group, version, phase, filter=None):
-		if filter is None:
-			filter = {}
-		count = 0
-		if not os.path.exists("%s/%s" %(dir, group)):
-			return count
-		for file in os.listdir("%s/%s" %(dir, group)):
-			if file.startswith("%s_" %(group)):
-				#if filter is set see if file is in either positive or negative filter and select it accordingly
-				if (not filter) \
-					or (filter["positiveFilter"] and file in filter["files"]) \
-					or (not filter["positiveFilter"] and file not in filter["files"]):
-					self.add(ReleaseScript("%s/%s/%s" %(dir, group, file), version, phase, self))
-					count += 1
-		self.groups.append(group)
-		return count
-
-	def toDot(self, url=None, basePathTrimLen=0, arborescent=False):
-		str = ""
-		for releaseScript in self.releaseScripts:
-			str += "%s\n" %(releaseScript.toDotNode(url, basePathTrimLen))
-		for releaseScript in self.releaseScripts:
-			str += "%s\n" %(releaseScript.toDotEdge(arborescent))
-		return "digraph G {\ngraph [bgcolor=transparent];\n%s}" %(str)
-
-	def toJSON(self):
-		nodes = { }
-		for releaseScript in self.releaseScripts:
-			name, color, progress = releaseScript.toJSONNode()
-			nodes[name] = {}
-			nodes[name]["status"] = color
-			nodes[name]["progress"] = progress
-		return simplejson.dumps(nodes)
-
-	def isDAG(self):
-		"""Checks to ensure scripts are arranged in Directed Acyclic Graph.
-		Cyclicality is tested by gparent compile so we just need to check that
-		graph is connected"""
-		firstJobs = []
-		for rs in self.releaseScripts:
-			if [dep for dep in rs.hdep + rs.sdep + rs.idep if self.find(dep)]:
-				#script has some 'active' dependencies.
-				rs.dagPass = True
-			else:
-				log("gparents of %s: %s" %(rs.name, rs.gparent), logging.DEBUG)
-				firstJobs.append(rs.name)
-				if rs.name in self.specialJobs:
-					rs.dagPass = True
-		if len(firstJobs) > 1:
-			log("DAG is disconnected. First jobs: %s" % firstJobs, logging.DEBUG)
-			return False
-		return True
-
-	def validate(self):
-		errorMessages = ""
-
-		for releaseScript in self.releaseScripts:
-			errorMessage = releaseScript.validate()
-			if errorMessage:
-				errorMessages += "%s" %(errorMessage)
-
-		if not self.gparentCompileSuccess:
-			errorMessages += "\tFailed recusion check for cycles in dependencies.\n"
-			#When we hit this state the other validation information is not very reliable
-
-		if len(self.specialJobs) == 0:
-			raise FatalRuntimeError("ERROR: special jobs must be set before validation")
-
-		if not self.isDAG():
-			errorMessages += "\tDAG is violated:\n"
-			for rs in self.releaseScripts:
-				if not rs.dagPass:
-					errorMessages += "\t\t%s\n" %rs.name
-
-		if errorMessages == "":
-			return True
-		else:
-			return errorMessages
-
-	def isDone(self):
-		for rs in self.releaseScripts:
-			if not rs.isDone():
-					return False
-		return True
-
-	def isSuccess(self):
-		for rs in self.releaseScripts:
-			if not rs.isSuccess():
-					return False
-		return True
-
-	def isGroupSuccess(self, group):
-		for rs in self.releaseScripts:
-			if rs.group == group:
-				if not rs.isSuccess():
-						return False
-		return True
-
-	def countGroups(self, excludes):
-		counted = []
-		for rs in self.releaseScripts:
-			if rs.group in counted:
-				continue
-			if rs.group in excludes:
-				continue
-			counted.append(rs.group)
-		return len(counted)
-
-	def gparentCompile(self):
-		try:
-			for rs in self.releaseScripts:
-				rs.gparentCompile()
-			self.gparentCompileSuccess = True
-			return True
-		except RuntimeError:
-			#Lazy mans cycle detection
-			self.gparentCompileSuccess = False
-			return False
-
-	def queueJobs(self):
-		for rs in self.releaseScripts:
-			rs.initEvents()
-		return [rs.queue for rs in self.releaseScripts]
-
-	def abortJobs(self):
-		for rs in self.releaseScripts:
-			if rs.status == Status.QUEUED or rs.status == status.BLOCKED:
-				rs.status = Status.CANCELLED
-			#we must clear all events to ensure jobs are flushed out
-			rs.event.set()
-
-#AKA AIS
-class ReleaseScript(object):
-	class Phase(dict):
-		all = ("EARLY", "DEFAULT", "LATE", "NONE")
-		EARLY, DEFAULT, LATE, NONE = all
-
-		@classmethod
-		def prev(cls, phase):
-			return cls.all[cls.all.index(phase)-1]
-
-	def __init__(self, script, version, phase, manager):
-		self.script = script
-		#TODO deps should be converted to a dict see adep()
-		self.hdep = [] #hard dependency
-		self.sdep = [] #soft dependency
-		self.idep = [] #inferred dependency
-		self.cdep = [] #child dependencies
-		self.resources = [] #needed resources
-		self.gparent = []
-		self.products = []
-		self.override = False
-		self._status = Status.NONE
-		self.version = version
-		self.containsTrap = False
-		self.regexok = False
-		self.dagPass = None
-		self.validSyntax = None
-		self.isExecutable = False
-		self.group = ""
-		self.name = ""
-		self.progress = -1
-		self.phase = phase
-		self.monitoredEvents = []
-		self.event = gevent.event.Event()
-		self.stdout = ""
-		self.hasFailed = False
-		self.manager = manager
-		self.gitHead = ""
-		self.nodeColors = {Status.STARTED:'yellow', Status.SUCCEEDED:'green', Status.FAILED:'red', Status.CANCELLED:'blue', Status.MANUALOVERRIDE:'pink', Status.BLOCKED:'brown'}
-
-		regexName = re.compile("[^/]*$")
-		matchName = regexName.search(script)
-		if not matchName:
-			raise ConfigurationError("Error: Could not determine AIS name from '%s'." %(script))
-		else:
-			self.name = matchName.group(0)
-
-		regexGroup = re.compile("[^_]+")
-		matchGroup = regexGroup.search(self.name)
-		if not matchGroup:
-			raise ConfigurationError("Error: Could not determine the group to which '%s' belongs." %(self.name))
-		else:
-			self.group = matchGroup.group(0)
-
-		self.accessCheck()
-		self.parseScript()
-		self.syntaxCheck()
-
-	def __str__(self):
-		return "Script: %s (%s) depending on: %s %s %s" % (
-			self.name,
-			self.status,
-			" ".join(["(%s)" % dep for dep in self.sdep]),
-			" ".join(["[%s]" % dep for dep in self.idep]),
-			" ".join(["{%s}" % dep for dep in self.hdep])
-			)
-
-	def queue(self):
-		rcubic = self.manager.rcubic
-		if self.status == Status.SUCCEEDED:
-			return False
-
-		self.status = Status.QUEUED
-		self.stdout = ""
-
-		for event in self.monitoredEvents:
-			event.wait()
-
-		if self.status == Status.CANCELLED:
-			log("Cancelled job %s" % self.name, logging.INFO)
-			return False
-
-		self.gitHead = rcubic.gitHead
-		arguments = []
-		arguments.append(self.script)
-		arguments.append(self.version)
-		arguments.append(rcubic.environment)
-		arguments.append(self.script)
-		arguments.append(`rcubic.port`)
-
-		self.status = Status.BLOCKED
-		rcubic.refreshStatus(self)
-		self.manager.rcubic.resourceScheduler.request(self.resources)
-
-		self.status = Status.STARTED
-		rcubic.refreshStatus(self)
-		rcode, self.stdout = popenNonblock(
-			arguments,
-			cwd=rcubic.releaseDir,
-			logFile="%s/work/log/%s.log" %((self.manager.rcubic.config["basePath"], self.name))
-			)
-
-		self.manager.rcubic.resourceScheduler.release(self.resources)
-		if rcode == 0:
-			self.status = Status.SUCCEEDED
-			rcubic.refreshStatus(self)
-			self.event.set()
-			return True
-		else:
-			self.status = Status.FAILED
-			rcubic.refreshStatus(self)
-			return False
-
-
-	def gparentCompile(self):
-		"""Finds all 'live' grandparents of a job and saves them to rs.gparent."""
-		#Not exactly efficient hash tables might help memory foot print.
-		deps = self.hdep + self.sdep + self.idep
-		if self.gparent:
-			return self.gparent + deps
-		else:
-			for parent in deps:
-				parent = self.manager.find(parent)
-				if parent:
-					for gparent in parent.gparentCompile():
-						if gparent in self.gparent:
-							continue
-						self.gparent.append(gparent)
-			return self.gparent + deps
-
-	def setOverride(self):
-		self.override = True
-
-	@property
-	def adep(self):
-		deps = dict()
-		deps.update(dict([(dep, 'hdep') for dep in self.hdep]))
-		deps.update(dict([(dep, 'sdep') for dep in self.sdep]))
-		deps.update(dict([(dep, 'idep') for dep in self.idep]))
-		return deps
-
-	def isDone(self):
-		if self.status in [ Status.SUCCEEDED, Status.FAILED, Status.CANCELLED, Status.MANUALOVERRIDE]:
-			return True
-		return False
-
-	def isSuccess(self):
-		if self.status in [ Status.SUCCEEDED, Status.MANUALOVERRIDE ]:
-			return True
-		return False
-
-	@property
-	def isFailed(self):
-		if self.status == Status.FAILED:
-			return True
-		return False
-
-	def updateProgress(self, progress):
-		try:
-			progress = int(progress)
-		except ValueError:
-			return False
-		if progress < 0:
-			return False
-		if progress > 100:
-			return False
-		if progress >= self.progress:
-			self.progress = progress
-			return True
-		return False
-
-	@property
-	def status(self):
-		return self._status
-
-	@status.setter
-	def status(self, status):
-		if status not in Status.all:
-			raise FatalRuntimeError("ERROR: Setting status to unknown value")
-		self._status = status
-		if self.isFailed:
-			self.hasFailed = True
-
-	def syntaxCheck(self):
-		with open("/dev/null", "w") as devnull:
-			process = subprocess.Popen(["bash", "-n", self.script], stdout=devnull, stderr=devnull)
-		self.validSyntax = process.wait() == 0
-		return self.validSyntax
-
-	#Preps a job to be run out of sequnce
-	#this proccess seems backwards. It seems like adding all the jobs first and deleting the ones that are not needed is more flexible
-	def hijack(self, hijackPoint):
-		for hdep in self.hdep:
-			if not self.manager.find(hdep):
-				self.hdep.remove(hdep)
-		#TODO There might be a smarter way to reset dependencies in the case of a hijack?
-		if not self.hdep and self.phase != self.Phase.EARLY :
-			self.hdep.append(hijackPoint)
-
-	def accessCheck(self):
-		self.isExecutable = os.access(self.script, os.X_OK)
-
-	def parseScript(self):
-		f = open(self.script)
-		script = f.read()
-
-		self.hdep = self._getHeader("HDEP", script)
-		self.sdep = self._getHeader("SDEP", script)
-		self.cdep = self._getHeader("CDEP", script)
-		self.resources = self._getHeader("RESOURCES", script)
-		self.resources.append("default")
-		self.products = self._getHeader("PRODUCT", script)
-
-		try:
-			phase = self._getHeader("PHASE", script)[0].upper()
-			if phase in ReleaseScript.Phase.all:
-				self.phase = phase
-		except IndexError:
-			pass
-
-		trapRe = re.compile("^[^#]*trap\s.*\s(EXIT|0)", re.MULTILINE)
-		if trapRe.search(script):
-			self.containsTrap = True
-
-		if "scriptregex" in self.manager.rcubic.config:
-			self.regexok = bool(
-				re.search(self.manager.rcubic.config["scriptregex"], script, re.MULTILINE)
-				)
-		f.close()
-
-	def _getHeader(self, header, script):
-		headerRe = re.compile("^[\s]*#%s:.*$" %(header), re.MULTILINE)
-		line = headerRe.search(script)
-		if line:
-			return self._parseHeaderLine(line.group(0))
-		else:
-			return []
-
-	def _parseHeaderLine(self, line):
-		begin = re.compile("^#[A-Z0-9]+:[\s]*")
-		seperator = re.compile("[,;\s]+")
-		retVal = seperator.split(begin.sub("", line, 1))
-		while True:
-			try:
-				retVal.remove("")
-			except ValueError:
-				break
-		return retVal
-
-	def toJSONNode(self):
-		color = "white"
-		if self.status in self.nodeColors:
-			color = self.nodeColors[self.status]
-		return (self.name, color, self.progress)
-
-	def toDotNode(self, url=None, basePathTrimLen=0):
-
-		str = "\t\"%s\" [style=\"filled\"" %(self.name)
-		if self.status in self.nodeColors:
-			str += ", fillcolor=\"%s\"" %(self.nodeColors[self.status])
-		else:
-			str += ", fillcolor=\"white\""
-
-		#if self.progress >= 0:
-			#str += ", label=\"%s\\n%d%%\"" %(self.name, self.progress)
-
-		if self.override:
-			str += ", color=\"blue\""
-
-		if url:
-			if self.manager.rcubic.config["fileMode"]:
-				str += ", href=\"%s/%s\"" %(self.manager.rcubic.config["basePath"][len(self.manager.rcubic.originalBasePath):], self.script[basePathTrimLen:])
-			else:
-				# If job hasn't started yet, guess to use the rcubic head
-				if(self.gitHead == ""):
-					gitHead = self.manager.rcubic.gitHead
-				else:
-					gitHead = self.gitHead
-				str += ", href=\"%s/gitweb?p=%s;a=blob;f=%s;hb=%s\"" % (self.manager.rcubic.config["gerritURL"],self.manager.rcubic.config["gerritProject"], self.script[basePathTrimLen:].lstrip('/'), gitHead)
-
-		str += "];"
-		return str
-
-	def toDotEdge(self, arborescent=False):
-		str=""
-		colors = {
-			'sdep' : {'undefnode':'gray', 'undefedge':'palegreen', 'node':'green'},
-			'idep' : {'undefnode':'gray', 'undefedge':'palegreen', 'node':'gold4'},
-			'hdep' : {'undefnode':'red', 'undefedge':'red', 'node':'blue'}
-		}
-		for dep, kind in self.adep.iteritems():
-			if arborescent:
-				if dep in self.gparent:
-					continue
-			if not self.manager.find(dep):
-					str += "\t\"%s\" [color=\"%s\"];" %(dep, colors[kind]['undefnode'])
-					str += "\t\"%s\" -> \"%s\" [color=\"%s\"];\n" %(dep, self.name, colors[kind]['undefedge'])
-			else:
-				str += "\t\"%s\" -> \"%s\" [color=\"%s\"];\n" %(dep, self.name, colors[kind]['node'])
-		return str
-
-	def validate(self):
-		str = ""
-		depCount = 0
-
-		if not self.isExecutable:
-			str += "\tThe script %s is not executable.\n" %(self.script)
-
-		if self.name == "":
-			str += "\tCannot determine name of %s\n" %(self.script)
-		if self.group == "":
-			str += "\tCannot determine group of %s\n" %(self.script)
-
-		if self.products == []:
-			str += "\tProduct name not defined in %s.\n" %(self.script)
-
-		#TODO: clean this code to use isDAG style
-		for hdep in self.hdep:
-			if not self.manager.find(hdep):
-				str += "\tcannot locate '%s', needed for '%s'\n" %(hdep, self.name)
-			else:
-				depCount += 1
-		for sdep in self.sdep:
-			if self.manager.find(sdep):
-				depCount += 1
-		if self.name not in self.manager.specialJobs:
-			if depCount <= 0:
-				str += "\t%s is an unrechable in phase.\n" %(self.name)
-
-		globex = re.compile(".*[][*?].*")
-		for hdep in self.hdep:
-			match = globex.search(hdep)
-			if match:
-				str += "\t%s contains globs in hdep: %s.\n" %(self.name, match.group(0))
-
-		if self.phase == ReleaseScript.Phase.NONE:
-			str += "\tPhase of job %s is not known.\n" %(self.name)
-		if self.containsTrap:
-			str += "\t%s contains it's own 'EXIT' trap.\n" %(self.name)
-		if not self.regexok:
-			str += "\t%s does not match required regex.\n" %(self.name)
-		if not self.validSyntax:
-			str += "\t%s does not pass syntax check.\n" %(self.name)
-		if str:
-			return str
-		else:
-			return None
-
-	def initEvents(self):
-		deps = []
-		for dep, kind in self.adep.iteritems():
-			if dep in self.gparent:
-				continue
-			depInst = self.manager.find(dep)
-			if depInst is not None:
-				self.monitoredEvents.append(depInst.event)
-			elif kind == "hdep":
-				raise FatalRuntimeError("ERROR: Unreachable hard dependency. At this phase it should be impossible")
-
-class LogToDB(object):
-	def __init__(self, dbPath):
-		self.dbPath = dbPath
-		newdb = (not os.path.exists(self.dbPath))
-		self.conn = sqlite3.connect(self.dbPath)
-		self.conn.isolation_level = None	# set to autocommit
-		if newdb:
-			self._initDB(self.conn)
-
-	def _initDB(self, conn):
-		query = "CREATE TABLE events (time integer, groupe text, version text, job text, status text, " \
-					" PRIMARY KEY (time, groupe, job, status))"
-		self.conn.execute(query)
-		query = "CREATE TABLE latest_events (time integer, groupe text, version text, job text, status text, " \
-					" FOREIGN KEY (time, groupe, job, status) REFERENCES event(time, groupe, job, status), " \
-					" UNIQUE (groupe, job))"
-		self.conn.execute(query)
-		self.conn.commit()
-
-	def saveStatus(self, group, version, status, job=Status.NONE):
-		if job.upper() == Status.NONE:
-			job = job.upper()
-		timestamp = int(time.time())
-		self.conn.execute("INSERT OR REPLACE INTO events VALUES (?,?,?,?,?)", (timestamp, group, version, str(job), status))
-		self.conn.execute("INSERT OR REPLACE INTO latest_events VALUES (?,?,?,?,?)", (timestamp, group, version, str(job), status))
-		self.conn.commit()
-		return True
-
-	def isNewestVersion(self, group, version):
-		"""Check if the latest group entry with status SUCCEEDED and job NONE is newer than version."""
-		query = "SELECT version FROM events WHERE groupe = ? AND JOB = ? AND status = ? ORDER BY time DESC LIMIT 1"
-		rows = list(self.conn.execute(query, (group, 'NONE', Status.SUCCEEDED)))
-		if rows:
-			return self.verComp(version, rows[0][0]) > 0
-		else:
-			return True
-
-	#def getUnfinished(self, group=None):
-	#	query = "SELECT * FROM latest_events WHERE status = ? "
-	#	if group:
-	#		result = self.conn.execute(query + " AND groupe = ? ", (Status.STARTED, group))
-	#	else:
-	#		result = self.conn.execute(query, (Status.STARTED,))
-	#	return list(result)
-
-
-	#def closeUnfinished(self, group, job):
-	#	#probably a good idea to log when ever this is run because it mucks with audit log
-	#	unfinishedEntries = self.getUnfinished(group)
-
-	#	for entry in unfinishedEntries:
-	#		if entry[3] == job:
-	#			self.saveStatus(entry[1], entry[2], Status.FAILED, entry[3])
-
-	#def getStatus(self, group, version, job=None):
-	#	"""Returns single most relavant 'Status' update matching criteria from arguments."""
-	#	query = "SELECT status FROM latest_events WHERE groupe = ? AND version = ? "
-	#	if job:
-	#		result = self.conn.execute(query + " AND job = ? ", (group, version, job))
-	#	else:
-	#		result = self.conn.execute(query, (group, version))
-	#	stati = [row[0] for row in result]
-	#	importance = [Status.FAILED, Status.QUEUED, Status.STARTED, Status.SUCCEEDED]
-	#	for imp in importance:
-	#		if imp in stati:
-	#			return imp
-	#	return "NONE"
-
-	@classmethod
-	def verComp(cls, a, b):
-		#-1 b greater
-		#0 same
-		#1 a greater
-		alphas = re.compile("[a-zA-Z]")
-		rev = re.compile("[-_~]")
-		dots = re.compile("[.,]")
-
-		a = re.sub(alphas, "", a)
-		a = rev.split(a, 1)
-		a[0] = dots.split(a[0])
-
-		b = re.sub(alphas, "", b)
-		b = rev.split(b, 1)
-		b[0] = dots.split(b[0])
-
-		while len(a[0]) < len(b[0]):
-			a[0].append(0)
-		while len(b[0]) < len(b[0]):
-			b[0].append(0)
-
-		for a1, b1 in zip(a[0], b[0]):
-			a1 = int(a1)
-			b1 = int(b1)
-			if a1 == b1:
-				continue
-			elif a1 > b1:
-				return 1
-			elif a1 < b1:
-				return - 1
-		if len(a) == len(b):
-			if len(a) == 1:
-				return 0
-			else:
-				return cls.verComp(a[1], b[1])
-		elif len(b) > len(a):
-			return 1
-		elif len(a) > len(b):
-			return - 1
-
 
 class RcubicNotification(object):
 	def __init__(self):
@@ -894,7 +113,7 @@ class Rcubic(object):
 		self.gitHead = ""
 		#Special groups are always selected, even if not passed through -g however they are not counted toward number of groups to install
 		#self.config["specialGroups"] = ["release"] #Now self.config["specialGroups"]
-		baseConfigReq = [ "basePath", "hostListLocation", "gitRepo", "fileMode", "gerritURL", "gerritProject", "archivePath", 
+		baseConfigReq = [ "basePath", "hostListLocation", "gitRepo", "fileMode", "gerritURL", "gerritProject", "basePathWeb",
 						  "environmentOptions", "specialGroups", "specialJobs",
 						  "listenAddress", "listenPortRange", "jobExpireTime",
 						  "smtpServer", "emailSubjectPrefix", "emailFrom", "maxEmailLogSizeKB",
@@ -1088,6 +307,7 @@ class Rcubic(object):
 
 	def _initPaths(self):
 		self.originalBasePath = self.config["basePath"]
+		self.config["basePath"] = "%s/%s" % (self.config["basePath"], self.config["basePathWeb"])
 		self.config["archivePath"] = "%s/archive/" % (self.config["basePath"])
 		if self.opts.sessionMode:
 			if self.groupSelect != []:
@@ -1109,7 +329,7 @@ class Rcubic(object):
 			tURL = self.config["basePath"][len(self.originalBasePath):]
 			if(len(tURL) > 0):
 				tURL = tURL + '/'
-			self.fullURL = "%s/?prefix=%swork" %(self.config["baseURL"], tURL)
+			self.fullURL = "%s/%s?prefix=%swork" %(self.config["baseURL"], self.config["basePathWeb"], tURL)
 			self.baseURL = "%s/%s" %(self.config["baseURL"], self.config["basePath"][len(self.originalBasePath):])
 		log("URL: %s" % self.fullURL, logging.INFO)
 
@@ -1385,9 +605,9 @@ class Rcubic(object):
 	def refreshStatus(self, rs):
 		self.signalEvent.set()
 
-		self.log.saveStatus(rs.group, rs.version, rs.status, rs.name)
+		self.log.saveStatus(rs.group, rs.version, rs.status, self.gitHead, rs.name)
 		if rs.isDone() and self.rsm.isGroupSuccess(rs.group):
-			self.log.saveStatus(rs.group, rs.version, rs.status)
+			self.log.saveStatus(rs.group, rs.version, rs.status, self.gitHead)
 			pass
 
 		if self.opts.sessionMode and rs.isFailed:
@@ -1448,7 +668,10 @@ class Rcubic(object):
 			uid = uuid.uuid1()
 			uDir = "%s/%s" % (self.config["archivePath"], uid)
 			os.makedirs(uDir)
-			for f in [ self.config['adotFile'], self.config['asvgFile'], self.config['njsonFile'] ]:
+			files = [ self.config['adotFile'], self.config['asvgFile'], self.config['njsonFile'] ]
+			if not self.opts.foreground:
+				files.append(self.config['logFile'])
+			for f in files:
 				shutil.copy(f, uDir)
 			shutil.copytree("%s/%s" % (self.config["basePath"], "work/log"), "%s/%s" % (uDir,"log"))
 			log("Copied files to: %s" % (uDir), logging.INFO)
@@ -1456,7 +679,7 @@ class Rcubic(object):
 			tURL = "archive/%s" % uid
 			if(len(tURL) > 0):
 				tURL = tURL + '/'
-			fullURL = "%s/?prefix=%s" %(self.config["baseURL"], tURL)
+			fullURL = "%s/%s/?prefix=%s" %(self.config["baseURL"], self.config["basePathWeb"], tURL)
 			log("Job archive available at: %s" % (fullURL), logging.INFO)
 		except:
 			log("Something went wrong while trying to copy files to archive: %s" % (str(sys.exc_info())), logging.ERROR)
@@ -1485,7 +708,6 @@ class Rcubic(object):
 			self.config["token"] = None
 		
 		self.communicator = RESTCommunicator(self, bind=self.config["listenAddress"], portRange=self.config["listenPortRange"], SSLKey=self.config["SSLKey"], SSLCert=self.config["SSLCert"], token=self.config["token"])
-		self.port = self.communicator.port
 		rse = self.rsm.queueJobs() #release script event
 
 		jobs = [gevent.spawn(rsei) for rsei in rse]
@@ -1493,6 +715,8 @@ class Rcubic(object):
 		# Starts non-blocking so we can get port
 		self.communicator.start(block=False)
 		log("Server started at %s:%s" % (self.communicator.bind, self.communicator.port), logging.INFO)
+		self.token = self.communicator.token
+		self.port = self.communicator.port
 		gevent.joinall(jobs)
 		time.sleep(5)
 		self._updateGraph(updateDot=True)
@@ -1511,8 +735,18 @@ class RcubicDaemon(Daemon):
 	def run(self):
 		self.rcubic.run()
 
+def _setupLogging():
+	dpp12_time = '%Y-%m-%d %H:%M:%S' + str.format('{0:+06.2f}', float(time.altzone) / 3600).replace(".", "")
+	log_format = logging.Formatter('[%(asctime)s] | %(filename)s | %(process)d | %(levelname)s | %(message)s', datefmt=dpp12_time)
+	handler = logging.StreamHandler()
+	handler.setFormatter(log_format)
+	logger = logging.getLogger('')
+	logger.setLevel(logging.INFO)
+	#logger.setLevel(logging.DEBUG)
+	logger.addHandler(handler)
 
 if __name__ == "__main__":
+	_setupLogging()
 	argParser = argparse.ArgumentParser(description='Rcubic does stuff! Important stuff!')
 	#argParser.add_argument('-p', dest='path', metavar='path', required=True, help='Base path of release.')
 	argParser.add_argument('-e', dest='environment', metavar='environmet', required=False, help='Environment options.')

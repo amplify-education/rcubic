@@ -275,7 +275,7 @@ Graph Legend
 
     + Gray: script status is missing. Graph might have changed: refresh page.
 
-    + Brown: script blocked waiting for resource
+    + Dark Orange: script blocked waiting for resource
 
   - Stroke:
    
