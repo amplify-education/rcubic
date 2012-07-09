@@ -7,6 +7,7 @@ waitForCheckIns.py
 RCubic/BotClient.py
 RCubic/RCubicClient.py
 RCubic/RCubicServer.py
+RCubic/ResourceScheduler.py
 RCubic/RESTCommunicator.py
 RCubic/__init__.py
 RCubic/rcubic.xml.template
