@@ -1,8 +1,10 @@
 <?xml version="1.0"?>
 <wgr>
-	<config>
-		<option name="basePath" value="@@@workDir@@@"/>
-		<option name="archivePath" value="@@@workDir@@@/archive" />
+    <config>
+        <!-- HTTP ROOT -->
+        <option name="basePath" value="/srv/http/"/>
+        <!-- directory where to store files in HTTP root -->
+        <option name="basePathWeb" value="rcubic" />
 		<option name="hostListLocation" value="hostList"/>
 		<option name="gitRepo" value="http://git.example.com:8080/p/project"/>
 		<option name="gitBranch" value="master"/>
@@ -29,5 +31,11 @@
 		<option name="SSLKey" value="server.key" />
 		<option name="SSLCert" value="server.crt" />
 		<option name="token" value="123" />
-	</config>
+    </config>
+	<resources>
+		<!---1 for infinity, n>=0 for exact quantity-->
+		<option name="default" value="-1" />
+		<option name="network" value="2" />
+		<option name="cpu" value="3" />
+	</resources>
 </wgr>

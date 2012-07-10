@@ -5,7 +5,7 @@
 
 source ../helper/common.sh
 
-sleep 15
+sleep 10
 rm 'badFile'
-manualOverride.py --port 31337 --addr localhost --token 123 --script mover_fail.sh
+manualOverride.py --port $4 --addr localhost --script mover_fail.sh $5
 exit 0
