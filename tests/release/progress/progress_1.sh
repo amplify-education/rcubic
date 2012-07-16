@@ -4,7 +4,7 @@
 #HDEP: release_start.sh
 
 source ../helper/common.sh
-name=$(basename $(readlink -nf $0))
+name=$(basename $0)
 time=$[ ( $RANDOM % 30) + 1]
 for (( c=1; c<=$time; c++ )); do
     progress=$(( c*100/time))

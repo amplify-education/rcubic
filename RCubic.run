@@ -307,7 +307,11 @@ class Rcubic(object):
 
 	def _initPaths(self):
 		self.originalBasePath = self.config["basePath"]
-		self.config["basePath"] = "%s/%s" % (self.config["basePath"], self.config["basePathWeb"])
+		if(self.config["basePathWeb"] != ""):
+			bpw = "/" + self.config["basePathWeb"]
+		else:
+			bpw = ""
+		self.config["basePath"] = "%s%s" % (self.config["basePath"], bpw)
 		self.config["archivePath"] = "%s/archive/" % (self.config["basePath"])
 		if self.opts.sessionMode:
 			if self.groupSelect != []:
@@ -665,29 +669,42 @@ class Rcubic(object):
 	
 	def cleanup(self):
 		try:
-			uid = uuid.uuid1()
-			uDir = "%s/%s" % (self.config["archivePath"], uid)
-			os.makedirs(uDir)
-			files = [ self.config['adotFile'], self.config['asvgFile'], self.config['njsonFile'] ]
-			if not self.opts.foreground and not self.opts.validate:
-				files.append(self.config['logFile'])
-			for f in files:
-				shutil.copy(f, uDir)
-			if(not self.opts.validate):
-				shutil.copytree("%s/%s" % (self.config["basePath"], "work/log"), "%s/%s" % (uDir,"log"))
-			log("Copied files to: %s" % (uDir), logging.INFO)
+			if(not self.opts.sessionMode):
+				uid = uuid.uuid1()
+				uDir = "%s/%s" % (self.config["archivePath"], uid)
+				os.makedirs(uDir)
+				files = [ self.config['adotFile'], self.config['asvgFile'], self.config['njsonFile'] ]
+				if not self.opts.foreground and not self.opts.validate:
+					files.append(self.config['logFile'])
+				for f in files:
+					shutil.copy(f, uDir)
+				if(not self.opts.validate):
+					shutil.copytree("%s/%s" % (self.config["basePath"], "work/log"), "%s/%s" % (uDir,"log"))
+				log("Copied files to: %s" % (uDir), logging.INFO)
 
-			tURL = "archive/%s" % uid
-			if(len(tURL) > 0):
-				tURL = tURL + '/'
-			fullURL = "%s/%s/?prefix=%s" %(self.config["baseURL"], self.config["basePathWeb"], tURL)
-			log("Job archive available at: %s" % (fullURL), logging.INFO)
+				tURL = "archive/%s" % uid
+				if(len(tURL) > 0):
+					tURL = tURL + '/'
+				if(self.config["basePathWeb"] != ""):
+					bpw = "/" + self.config["basePathWeb"]
+				else:
+					bpw = self.config["basePathWeb"]
+				fullURL = "%s%s/?prefix=%s" %(self.config["baseURL"], bpw, tURL)
+				log("Job archive available at: %s" % (fullURL), logging.INFO)
 		except:
 			log("Something went wrong while trying to copy files to archive: %s" % (str(sys.exc_info())), logging.ERROR)
 
-		if self.opts.cleanup and self.opts.sessionMode:
+		if not self.opts.cleanup and self.opts.sessionMode:
+			try:
+				shutil.rmtree("%s/%s" % (self.config["basePath"], "work/git"))
+				log("Removed git directory from session folder.", logging.INFO)
+			except:
+				log("Something went wrong when trying to remove git directory from session folder: %s" % (str(sys.exc_info())), logging.ERROR)
+
+		elif self.opts.cleanup and self.opts.sessionMode:
 			try:
 				shutil.rmtree(self.config["basePath"], False)
+				log("Removed session folder.", logging.INFO)
 			except KeyError:
 				#assume base path is not configured.. which means we didn't write anything to it either
 				pass

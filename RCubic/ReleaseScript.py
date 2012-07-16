@@ -1,6 +1,6 @@
 import os, re, gevent, subprocess, logging, fnmatch
 import simplejson
-from ScriptStatus import Status
+from RCubic.ScriptStatus import Status
 from RCubic.RCubicUtilities import log, popenNonblock, ConfigurationError, FatalRuntimeError 
 
 class ReleaseScriptManager(object):
@@ -209,7 +209,7 @@ class ReleaseScriptManager(object):
 
 	def abortJobs(self):
 		for rs in self.releaseScripts:
-			if rs.status == Status.QUEUED or rs.status == status.BLOCKED:
+			if rs.status == Status.QUEUED or rs.status == Status.BLOCKED:
 				rs.status = Status.CANCELLED
 			#we must clear all events to ensure jobs are flushed out
 			rs.event.set()
