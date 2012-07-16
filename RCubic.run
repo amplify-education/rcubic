@@ -126,7 +126,7 @@ class Rcubic(object):
 		else:
 			xmlpath = self.opts.conf
 
-		self._readConfig(xmlpath, baseConfigReq)
+		self._readConfig(xmlpath, baseConfigReq, splitOptions=splitOptions)
 		self.resourceScheduler = ResourceScheduler(self.resources)
 		self.config["gitRepo"] = [self.config["gitRepo"]]
 
@@ -468,6 +468,9 @@ class Rcubic(object):
 				if installed <= 0:
 					raise ConfigurationError("No matching install scripts found for group: %s." %(group))
 
+		for g in self.groupSelect:
+			if not g in toInstallGroups:
+				raise ConfigurationError("Group %s is not in the configuration" % g)
 		log("Installing groups %s." % " ".join(sorted(toInstallGroups)), logging.INFO)
 
 		if self.aisFilter:
