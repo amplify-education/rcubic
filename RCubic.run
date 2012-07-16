@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/env python
 #camelCase tab indented, if unsure, read pep8 thanks
 # vim: ts=4 noet filetype=python
 
@@ -669,11 +669,12 @@ class Rcubic(object):
 			uDir = "%s/%s" % (self.config["archivePath"], uid)
 			os.makedirs(uDir)
 			files = [ self.config['adotFile'], self.config['asvgFile'], self.config['njsonFile'] ]
-			if not self.opts.foreground:
+			if not self.opts.foreground and not self.opts.validate:
 				files.append(self.config['logFile'])
 			for f in files:
 				shutil.copy(f, uDir)
-			shutil.copytree("%s/%s" % (self.config["basePath"], "work/log"), "%s/%s" % (uDir,"log"))
+			if(not self.opts.validate):
+				shutil.copytree("%s/%s" % (self.config["basePath"], "work/log"), "%s/%s" % (uDir,"log"))
 			log("Copied files to: %s" % (uDir), logging.INFO)
 
 			tURL = "archive/%s" % uid
