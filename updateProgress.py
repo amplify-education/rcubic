@@ -17,5 +17,7 @@ parser.add_argument('--progress', dest='progress', required=True, help='Progress
 args = parser.parse_args()
 
 client = RCubicClient(server=args.addr, port=args.port, CACert=args.cacert, token=args.token)
-client.progress(args.script, args.version, args.progress)
-sys.exit(0)
+if client.progress(args.script, args.version, args.progress) == "True":
+    sys.exit(0)
+else:
+    sys.exit(1)
