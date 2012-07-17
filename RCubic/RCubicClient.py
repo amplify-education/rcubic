@@ -55,3 +55,9 @@ class RCubicClient(RESTClient):
 
         """
         return self.getResponse("manualOverride", data = {"scriptName": scriptName, "token": self.token}, *args, **kwargs)
+
+    def supported(self, feature=None, *args, **kwargs):
+        """Asks the server if it supports a feature.
+
+        """
+        return self.getResponse("supported", data = {"feature": feature, "token": self.token}, *args, **kwargs)

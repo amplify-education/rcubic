@@ -20,6 +20,8 @@ class RESTCommunicator(RESTServer):
 		self.registerFunction('reclone', self._reclone, token=True)
 		self.registerFunction('reschedule', self._reschedule, token=True)
 		self.registerFunction('manualOverride', self._manualOverride, token=True)
+		self.registerFunction('supported', self._supported, token=True)
+		self.features = ['progress', 'reclone', 'reschedule', 'manualOverride']
 		self.rcubic = rcubic
 
 	def _progress(self, env, start_response, post):
@@ -72,3 +74,16 @@ class RESTCommunicator(RESTServer):
 			return str(False)
 		return str(True)
 
+	def _supported(self, env, start_response, post):
+		"""Responds to a requested asking if a feature is supported
+
+		Keyword argument:
+		env -- expects a 'feature'
+
+		"""
+		feature = post['feature']
+		start_response(responseCodes[200], responseTypes['plaintext'])
+		if feature in self.features:
+			return str(True)
+		else:
+			return str(False)
