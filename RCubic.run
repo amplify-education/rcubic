@@ -206,15 +206,17 @@ class Rcubic(object):
 			if self.opts.refspec:
 				self.config["gitBranch"] = "FETCH_HEAD"
 			elif self.opts.branch:
-				self.config["gitBranch"] = self.opts.branch
+				self.config["gitBranch"] = "remotes/origin/%s" % self.opts.branch
 			elif "gitBranch" not in self.config:
-				self.config["gitBranch"] = "master"
+				self.config["gitBranch"] = "remotes/origin/master"
+			else:
+				self.config["gitBranch"] = "remotes/origin/%s" % self.config["gitBranch"]
 
 			try:
 				os.makedirs(self.gitDir)
 			except OSError:
 				pass
-		
+
 			try:
 				os.makedirs("%s/work/log" % (self.config["basePath"]))
 			except OSError:
@@ -236,7 +238,7 @@ class Rcubic(object):
 					except:
 						raise FatalRuntimeError("Cannot clone into directory. Is it not empty?")
 
-				#this is a safety to roll back any changes someone's made.
+				#this is a safety to roll back any changes someone's made
 				subprocess.call(['git', 'reset', '--hard'], cwd=self.gitDir)
 
 				#Lets fetch remote
@@ -247,7 +249,7 @@ class Rcubic(object):
 					raise FatalRuntimeError("git fetch failed")
 
 				#checkout the target of which we work
-				if subprocess.call(['git', 'checkout', "remotes/origin/%s" % self.config['gitBranch']], cwd=self.gitDir) != 0:
+				if subprocess.call(['git', 'checkout', self.config['gitBranch']], cwd=self.gitDir) != 0:
 					raise FatalRuntimeError("git checkout failed 1")
 
 				processResult = popenNonblock(["git", "rev-parse","HEAD"], cwd=self.gitDir)
