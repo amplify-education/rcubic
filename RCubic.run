@@ -671,7 +671,7 @@ class Rcubic(object):
 					self.abort()
 					break
 		self.communicator.stop()
-	
+
 	def cleanup(self):
 		try:
 			if(not self.opts.sessionMode):
@@ -699,20 +699,13 @@ class Rcubic(object):
 		except:
 			log("Something went wrong while trying to copy files to archive: %s" % (str(sys.exc_info())), logging.ERROR)
 
-		if not self.opts.cleanup and self.opts.sessionMode:
+		if self.opts.sessionMode:
 			try:
 				shutil.rmtree("%s/%s" % (self.config["basePath"], "work/git"))
 				log("Removed git directory from session folder.", logging.INFO)
 			except:
 				log("Something went wrong when trying to remove git directory from session folder: %s" % (str(sys.exc_info())), logging.ERROR)
 
-		elif self.opts.cleanup and self.opts.sessionMode:
-			try:
-				shutil.rmtree(self.config["basePath"], False)
-				log("Removed session folder.", logging.INFO)
-			except KeyError:
-				#assume base path is not configured.. which means we didn't write anything to it either
-				pass
 
 	def run(self):
 		time.sleep(1) #Sleep to let stdout get re-assigned on daemonization fork
@@ -729,7 +722,7 @@ class Rcubic(object):
 			self.config["SSLCert"] = None
 		if self.config["token"] == "":
 			self.config["token"] = None
-		
+
 		self.communicator = RESTCommunicator(self, bind=self.config["listenAddress"], portRange=self.config["listenPortRange"], SSLKey=self.config["SSLKey"], SSLCert=self.config["SSLCert"], token=self.config["token"])
 		rse = self.rsm.queueJobs() #release script event
 
@@ -779,7 +772,6 @@ if __name__ == "__main__":
 	argParser.add_argument('-v', dest='validate', action='store_const', const=True, default=False, help='Validate configuration.')
 	argParser.add_argument('-f', dest='foreground', action='store_const', const=True, default=False,  help='Run in foreground (debug) mode.')
 	argParser.add_argument('-s', dest='sessionMode', action='store_const', const=True, default=False,  help='Run in Session mode.')
-	argParser.add_argument('-C', dest='cleanup', action='store_const', const=False, default=True, help='When in session mode, upon completion do not clean up work directory.')
 	argParser.add_argument('-a', dest='ais', metavar='ais_list', action='append', default=None,
 							help='Select a single AIS to run. Can be specified multiple times for multiple AIS. Do not use with -i.')
 	argParser.add_argument('-A', dest='skipAis', metavar='ais_list', action='append', default=None,
