@@ -1,5 +1,6 @@
 setup.py
 RCubic.run
+featureSupported.py
 manualOverride.py
 rescheduleScript.py
 updateProgress.py
