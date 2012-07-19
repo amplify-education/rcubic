@@ -15,9 +15,22 @@
 
 <!-- CSS overrides to make text/bars smaller -->
 <style>
+html,body{
+    margin:0;
+    padding:0;
+    height:100%;
+    width:100%;
+    background-color: #000;
+}
+#graph{
+    height:100%;
+    width:100%;
+}
 .ui-dialog .ui-dialog-titlebar {
     height: 0.7em;
     padding: .0em .2em .3em .4em;
+    margin: 0em 0em 0em 0em;
+    overflow:hidden;
 }
 .ui-dialog .ui-dialog-title {
     font-size: 0.8em;
@@ -31,7 +44,7 @@
 }
 
 .syntaxhighlighter {
-padding: 0 0 0 0;
+    padding: 0 0 0 0;
 }
 
 .syntaxhighlighter a,
@@ -44,9 +57,9 @@ padding: 0 0 0 0;
 .syntaxhighlighter table thead,
 .syntaxhighlighter table caption,
 .syntaxhighlighter textarea {
-overflow-x: hidden !important;
-overflow-y: hidden !important;
-overflow: hidden !important;
+    overflow-x: hidden !important;
+    overflow-y: hidden !important;
+    overflow: hidden !important;
 }
 
 .ui-progressbar { height: 1em; }
@@ -58,9 +71,6 @@ body div.qtip div.content {
     width: 200px;
 }
 
-body {
-    background-color: #000;
-}
 </style>
 
 <script class="example" type="text/javascript">
