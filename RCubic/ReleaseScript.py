@@ -108,13 +108,19 @@ class ReleaseScriptManager(object):
 			str += "%s\n" %(releaseScript.toDotEdge(arborescent))
 		return "digraph G {\ngraph [bgcolor=transparent];\n%s}" %(str)
 
-	def toJSON(self):
+	def toJSON(self, arborescent=False):
 		nodes = { }
 		for releaseScript in self.releaseScripts:
-			name, color, progress = releaseScript.toJSONNode()
+			name, color, progress, others = releaseScript.toJSONNode(arborescent)
 			nodes[name] = {}
 			nodes[name]["status"] = color
 			nodes[name]["progress"] = progress
+			for o in others:
+				name, color, progress = o
+				if not name in nodes:
+					nodes[name] = {}
+					nodes[name]["status"] = color
+					nodes[name]["progress"] = progress
 		return simplejson.dumps(nodes)
 
 	def isDAG(self):
@@ -465,11 +471,23 @@ class ReleaseScript(object):
 				break
 		return retVal
 
-	def toJSONNode(self):
+	def toJSONNode(self, arborescent=False):
+		colors = {
+			'sdep' : {'undefnode':'gray', 'undefedge':'palegreen', 'node':'green'},
+			'idep' : {'undefnode':'gray', 'undefedge':'palegreen', 'node':'gold4'},
+			'hdep' : {'undefnode':'red', 'undefedge':'red', 'node':'blue'}
+		}
 		color = "white"
+		others = [ ]
 		if self.status in self.nodeColors:
 			color = self.nodeColors[self.status]
-		return (self.name, color, self.progress)
+		for dep, kind in self.adep.iteritems():
+			if arborescent:
+				if dep in self.gparent:
+					continue
+				if not self.manager.find(dep):
+					others.append([dep, colors[kind]['undefnode'], -1])
+		return (self.name, color, self.progress, others)
 
 	def toDotNode(self, url=None, basePathTrimLen=0):
 
@@ -511,7 +529,7 @@ class ReleaseScript(object):
 				if dep in self.gparent:
 					continue
 			if not self.manager.find(dep):
-					str += "\t\"%s\" [color=\"%s\"];" %(dep, colors[kind]['undefnode'])
+					str += "\t\"%s\" [color=\"%s\" href=\"http://geocities/bl@ckh0le\"];" %(dep, colors[kind]['undefnode'])
 					str += "\t\"%s\" -> \"%s\" [color=\"%s\"];\n" %(dep, self.name, colors[kind]['undefedge'])
 			else:
 				str += "\t\"%s\" -> \"%s\" [color=\"%s\"];\n" %(dep, self.name, colors[kind]['node'])

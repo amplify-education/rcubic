@@ -588,7 +588,7 @@ class Rcubic(object):
 					if processResult[0] != 0:
 						return False
 				with open(jn, "w") as jsonFD:
-					jsonFD.write(self.rsm.toJSON())
+					jsonFD.write(self.rsm.toJSON(t))
 
 			return True
 		except OSError:
