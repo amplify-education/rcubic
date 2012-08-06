@@ -75,9 +75,12 @@ class RcubicNotification(object):
 		msg['Subject'] = "%s %s %s" %(self.subject, ", ".join(products), subject)
 		msg['From'] = self.emailFrom
 		msg['To'] = ', '.join(recipients)
-		smtp = smtplib.SMTP(self.server)
-		smtp.sendmail(self.emailFrom, recipients, msg.as_string())
-		smtp.quit()
+		try:
+			smtp = smtplib.SMTP(self.server)
+			smtp.sendmail(self.emailFrom, recipients, msg.as_string())
+			smtp.quit()
+		except:
+			log("Sending email failed! Message: %s" % msg, logging.ERROR)
 
 	def processQueue(self):
 		try:
@@ -192,7 +195,7 @@ class Rcubic(object):
 			raise ConfigurationError("No notification configured. This is a bad thing")
 
 	def _initNotification(self):
-		self.notification.emailForm = self.config["emailFrom"]
+		self.notification.emailFrom = self.config["emailFrom"]
 		self.notification.subject = self.config["emailSubjectPrefix"]
 		self.notification.server = self.config["smtpServer"]
 		self.notification.cc = self.config.get("cc", "")
