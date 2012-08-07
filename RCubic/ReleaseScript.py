@@ -559,9 +559,8 @@ class ReleaseScript(object):
 		for sdep in self.sdep:
 			if self.manager.find(sdep):
 				depCount += 1
-		if self.name not in self.manager.specialJobs:
-			if depCount <= 0:
-				str += "\t%s is an unrechable in phase.\n" %(self.name)
+		if depCount <= 0 and self.name not in self.manager.specialJobs:
+				str += "\t%s must be a descendant of specialJobs (%s) but its not.\n" %(self.name, ",".join(self.manager.specialJobs))
 
 		globex = re.compile(".*[][*?].*")
 		for hdep in self.hdep:
