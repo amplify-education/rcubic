@@ -238,7 +238,7 @@ class Rcubic(object):
 
 				#Fetch the remote target branch
 				fetchCommand = ['git', 'fetch', self.config["gitRepo"][0]]
-				if self.opts.refspec
+				if self.opts.refspec:
 					fetchCommand.append(self.opts.refspec)
 				elif self.opts.branch:
 					fetchCommand.append("refs/heads/%s" % self.opts.branch)
