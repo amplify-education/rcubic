@@ -766,22 +766,21 @@ def _setupLogging():
 if __name__ == "__main__":
 	_setupLogging()
 	argParser = argparse.ArgumentParser(description='Rcubic does stuff! Important stuff!')
-	#argParser.add_argument('-p', dest='path', metavar='path', required=True, help='Base path of release.')
-	argParser.add_argument('-e', dest='environment', metavar='environmet', required=False, help='Environment options.')
 	argParser.add_argument('-r', dest='release', metavar='release_directory', required=False, help='Release. Number.')
 	argParser.add_argument('-g', dest='group', metavar='group', action='append',
 							help='Select Group to run. Can be specified multiple times for multiple groups.')
 	argParser.add_argument('-v', dest='validate', action='store_const', const=True, default=False, help='Validate configuration.')
+	argParser.add_argument('-V', '--extval', '--strictValidation', dest='strictValidation', action='store_const', const=True, default=False, help='Strict validation configuration. Run validation scripts.')
 	argParser.add_argument('-f', dest='foreground', action='store_const', const=True, default=False,  help='Run in foreground (debug) mode.')
 	argParser.add_argument('-s', dest='sessionMode', action='store_const', const=True, default=False,  help='Run in Session mode.')
 	argParser.add_argument('-a', dest='ais', metavar='ais_list', action='append', default=None,
 							help='Select a single AIS to run. Can be specified multiple times for multiple AIS. Do not use with -i.')
 	argParser.add_argument('-A', dest='skipAis', metavar='ais_list', action='append', default=None,
 							help='Select an AIS to skip. Can be specified multiple times for multiple AIS. Do not use with -a.')
-	argParser.add_argument('--strictValidation', dest='strictValidation', action='store_const', const=True, default=False, help='Strict validation configuration. Run validation scripts.')
 	argParser.add_argument('--refspec', dest='refspec', metavar='refspec', default=None,  help='refspec to fetch from, sets branch to FETCH_HEAD.')
 	argParser.add_argument('-b', dest='branch', metavar='branch', default=None, help='branch to checkout defaults to master unless --refspec is specified')
-	argParser.add_argument('--conf', dest='conf', default=None, help='path to rcubic.xml config file. Default RCubic.run directory')
+	argParser.add_argument('-e', dest='environment', metavar='environmet', required=False, help='Environment options.')
+	argParser.add_argument('-c','--config', dest='conf', default=None, help='path to rcubic.xml config file. Default RCubic.run directory')
 	opts = argParser.parse_args()
 
 	try:

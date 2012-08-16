@@ -3,6 +3,7 @@ from RCubic.RCubicClient import RCubicClient
 
 import sys
 import argparse
+from requests.exceptions import SSLError
 
 parser = argparse.ArgumentParser(description='Update RCubic with current progress')
 
@@ -15,5 +16,10 @@ parser.add_argument('--script', dest='script', required=True, help='Name of scri
 args = parser.parse_args()
 
 client = RCubicClient(server=args.addr, port=args.port, CACert=args.cacert, token=args.token)
-client.reschedule(args.script)
+resp = ''
+try:
+	resp = client.reschedule(args.script)
+except SSLError as e:
+	print("SSL negotiation error: {0}".format(e))
+	sys.exit(1)
 sys.exit(0)
