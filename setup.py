@@ -15,8 +15,7 @@ setup(name = 'RCubic',
       packages = ['RCubic'],
       # Command line scripts
       scripts = [
-          'RCubic.run', 'featureSupported.py', 'manualOverride.py',
-          'rescheduleScript.py', 'updateProgress.py', 'waitForCheckIns.py',
+          'rcubic', 'rcubic-cli', 'rcubic-checkin',
           ],
       # Config files
       data_files = [
