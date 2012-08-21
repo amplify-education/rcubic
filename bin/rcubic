@@ -130,12 +130,13 @@ class Rcubic(object):
 			xmlpath = self.opts.conf
 
 		self._readConfig(xmlpath, baseConfigReq, splitOptions=splitOptions)
-		self.resourceScheduler = ResourceScheduler(self.resources)
 		self.config["gitRepo"] = [self.config["gitRepo"]]
 
 		self._initPaths()
 		self._initGit()
 		self._readConfig("%s/config.xml" %(self.releaseDir), splitOptions=splitOptions)
+
+		self.resourceScheduler = ResourceScheduler(self.resources)
 
 		self.rsm.specialJobs = self.config["specialJobs"]
 

@@ -76,7 +76,7 @@ class ResourceScheduler(object):
         resources -- the requested resources (a list of strings)
 
         """
-        # Syncrhonize
+        # Synchronize
         self.lock.acquire()
         # Create event
         e = gevent.event.Event()

@@ -289,6 +289,11 @@ class ReleaseScript(object):
 
 	def queue(self):
 		rcubic = self.manager.rcubic
+
+		#Since queue is also used to re-schedule we need to be carefull about
+		#what jobs we can start. Either never started or failed ones.
+		#if self.status != Status.FAILED or self.status != Status.NONE:
+		#	print("error, status is %s" % self.status)
 		if self.status == Status.SUCCEEDED:
 			return False
 
