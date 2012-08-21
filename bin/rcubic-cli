@@ -1,0 +1,74 @@
+#!/usr/bin/env python
+# vim: ts=4 noet filetype=python
+
+from RCubic.RCubicClient import RCubicClient
+
+import sys
+import argparse
+from requests.exceptions import SSLError
+
+def feature(args):
+	client = RCubicClient(server=args.addr, port=args.port, CACert=args.cacert, token=args.token)
+	if client.reclone() == "True":
+		print("{0} is supported.".format(args.feature))
+		return True
+	else:
+		print("{0} is not supported.".format(args.feature))
+		return False
+
+def override(args):
+	client = RCubicClient(server=args.addr, port=args.port, CACert=args.cacert, token=args.token)
+	return client.manualOverride(args.script) == "True"
+
+def progress(args):
+	client = RCubicClient(server=args.addr, port=args.port, CACert=args.cacert, token=args.token)
+	return client.progress(args.script, args.version, args.progress) == "True"
+
+def reschedule(args):
+	client = RCubicClient(server=args.addr, port=args.port, CACert=args.cacert, token=args.token)
+	return client.reschedule(args.script) == "True"
+
+def reclone(args):
+	client = RCubicClient(server=args.addr, port=args.port, CACert=args.cacert, token=args.token)
+	return client.reclone() == "True"
+
+
+parser = argparse.ArgumentParser(description='Tool to interact with running rcubic instance.')
+
+subparsers = parser.add_subparsers(help='Sub-command help')
+parser_feature = subparsers.add_parser('feature', help='Ask RCubic if it supports a feature')
+parser_feature.add_argument('--feature', dest='feature', required=True, help='Name of to ask if supported', type=str)
+parser_feature.set_defaults(func=feature)
+
+parser_override = subparsers.add_parser('override', help='Tell RCubic to record a failed script as sucessfull')
+parser_override.add_argument('--script', dest='script', required=True, help='Name of script to cancel', type=str)
+parser_override.set_defaults(func=override)
+
+parser_progress = subparsers.add_parser('progress', help='Update RCubic with current progress')
+parser_progress.add_argument('--script', dest='script', required=True, help='Name of script to update', type=str)
+parser_progress.add_argument('--version', dest='version', default=None, help='Script version', type=str)
+parser_progress.add_argument('--progress', dest='progress', required=True, help='Progress value (0-100)', type=int)
+parser_progress.set_defaults(func=progress)
+
+parser_reschedule = subparsers.add_parser('reschedule', help='Tell RCubic to re-run a failed script')
+parser_reschedule.add_argument('--script', dest='script', required=True, help='Name of script to update', type=str)
+parser_reschedule.set_defaults(func=reschedule)
+
+parser_reclone = subparsers.add_parser('reclone', help='Tell RCubic to update the git repo checkout')
+parser_reclone.set_defaults(func=reclone)
+
+parser.add_argument('--port', dest='port', default=8002, help='Port on which RCubic is listening', type=int)
+parser.add_argument('--addr', dest='addr', default='localhost', help='Address on which RCubic is listening')
+parser.add_argument('--cacert', dest='cacert', default=None, help='CACert to auth server', type=str)
+parser.add_argument('--token', dest='token', default='', help='used to auth with bot server', type=str)
+
+args = parser.parse_args()
+try:
+	if args.func(args):
+		sys.exit(0)
+	else:
+		sys.exit(1)
+except SSLError as e:
+	print("SSL negotiation error: {0}".format(e))
+	sys.exit(2)
+
