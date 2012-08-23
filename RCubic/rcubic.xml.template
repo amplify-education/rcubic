@@ -1,36 +1,58 @@
 <?xml version="1.0"?>
-<wgr>
+<rcubic>
     <config>
-        <!-- HTTP ROOT -->
-        <option name="basePath" value="/srv/http/"/>
-        <!-- directory where to store files in HTTP root -->
-        <option name="basePathWeb" value="rcubic" />
-		<option name="hostListLocation" value="hostList"/>
+		<!-- SCM settings -->
 		<option name="gitRepo" value="http://git.example.com:8080/p/project"/>
 		<option name="gitBranch" value="master"/>
 		<option name="gerritURL" value="https://gerrit.example.com/" />
 		<option name="gerritProject" value="test.git" />
 		<option name="fileMode" value="False" />
-		<option name="environmentOptions" value="validate currentQA futureQA staging production"/>
-		<option name="specialGroups" value="release"/>
+
+		<!-- Environment settings -->
+		<option name="environment" value="staging"/>
+		<option name="environmentOptions" value="validate staging production"/>
+
+		<!-- Email settings -->
 		<option name="smtpServer" value="localhost"/>
-		<option name="emailSubjectPrefix" value="WGR:" />
+		<option name="emailSubjectPrefix" value="rcubic:" />
 		<option name="emailFrom" value="user@example.com" />
 		<option name="maxEmailLogSizeKB" value="2" />
 		<option name="notification" value="True"/>
+		<!-- Carbon copy the specified email on all outbound emails
+		<option name="cc" value="user@example.com"/>
+		-->
+
+		<!-- Job settings -->
+		<option name="specialGroups" value="release"/>
 		<option name="specialJobs" value="release_start.sh global_start.sh"/>
+		<!-- When rcubic is run with -A or -a options some jobs can get
+			 disconnected from the tree. When this happens we can specify
+			 what their parent job will be set to.
+		-->
 		<option name="hijackPoint" value="release_start.sh"/>
+
+		<!-- RESTful communication settings -->
 		<option name="listenAddress" value="localhost"/>
 		<option name="listenPortRange" value="31337-31347"/>
-		<option name="baseURL" value="http://localhost"/>
-		<option name="jobExpireTime" value="24"/>
-		<option name="defaultRelease" value="default"/>
-		<option name="environment" value="environment"/>
-		<!-- scriptregex defines things a script must match -->
-		<option name="scriptregex" value="^[^#]*source\s+\.\./(helper/wgrCommon\.sh|recipes/[^\s]*\.sh)"/>
+		<!-- Uncomment this to enable secure communication.
 		<option name="SSLKey" value="server.key" />
 		<option name="SSLCert" value="server.crt" />
 		<option name="token" value="123" />
+		-->
+
+		<!-- Web Server integration settings -->
+		<option name="baseURL" value="http://localhost"/>
+        <option name="basePathWeb" value="rcubic" />
+        <!-- HTTP ROOT -->
+        <option name="basePath" value="/srv/http/"/>
+
+		<!-- Job Validation settings -->
+		<option name="defaultRelease" value="default"/>
+		<!-- script must match this regular expression to be considered valid. -->
+		<option name="scriptregex" value=".*"/>
+		<!-- Do no let any job run for longer than this many hours -->
+		<option name="jobExpireTime" value="24"/>
+
     </config>
 	<resources>
 		<!---1 for infinity, n>=0 for exact quantity-->
@@ -38,4 +60,4 @@
 		<option name="network" value="2" />
 		<option name="cpu" value="3" />
 	</resources>
-</wgr>
+</rcubic>

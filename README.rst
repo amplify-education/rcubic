@@ -4,7 +4,7 @@ RCUBIC
 Introduction
 ------------
 
-Rcubic is a framework for coordinating the execution of many loosely related scripts. Rcubic will manage order of execution based on dependency specification inside the script header. Scripts can be split into groups which can be executed in different combinations provided that the dependencies can be fulfiled. During execution Rcubic will validate the sequence and display progress as steps complete.
+Rcubic is a framework for coordinating the execution of many loosely related scripts. Rcubic will manage order of execution based on dependency specification inside the script header. Scripts can be split into groups which can be executed in different combinations provided that the dependencies can be fulfilled. During execution Rcubic will validate the sequence and display progress as steps complete.
 
 .. contents::
 
@@ -67,29 +67,33 @@ Usage guide
 
 Executables
 ````````````
-* RCubic.run
+* *rcubic*
 
   - Launches the RCubic instance which reads in rcubic.xml, analyzes dependencies, and launches jobs
 
-* updateProgress.py
+* *rcubic-cli*
 
-  - Sends an http message to RCubic.py with an integer (0 - 100) of percent progress with the script
+  A tool for interacting with a running instance of rcubic. Several options are available, including:
 
-* rescheduleScript.py
+  - *progress*
 
-  - Sends an http message to RCubic.py with the name of the script to relaunch
+    + Sends an http message to RCubic.py with an integer (0 - 100) of percent progress with the script
 
-* manualOverride.py
+  - *reschedule*
 
-  - Sends an http message to RCubic.py telling it to cancel a script and set its status to *MANUALOVERRIDE*. **WARNING:** Children will still run.
+    + Sends an http message to RCubic.py with the name of the script to relaunch
 
-* waitForCheckins.py (optional)
+  - *override*
 
-  - Sends an http message to R2XBot and blocks, requesting for jabber users to check in. Unblocks, once the checkin has been recieved, or the block has timed out. Usefull for ensuring developers are on hand when a release is about to be deployed.
+    + Sends an http message to RCubic.py telling it to cancel a script and set its status to *MANUALOVERRIDE*. **WARNING:** Child jobs will still run.
 
-Step configuration
-``````````````````
-In order to operate Rcubic needs a set of scripts and configuration. This can be supplied in the form of a git repository, or regular directory, with the following layout:
+* *rcubic-checkin*
+
+  - Sends an http message to R2XBot and blocks, requesting for jabber users to check in. Unblocks, once the check-in has been received, or the block has timed out. Useful for ensuring developers are on hand when a release is about to be deployed.
+
+Configuration
+`````````````
+In order to operate RCubic needs a set of scripts and configuration. This can be supplied in the form of a git repository, or regular directory, with the following layout:
 
 ::
 
@@ -105,19 +109,105 @@ In order to operate Rcubic needs a set of scripts and configuration. This can be
         GROUP_DIR_3_name2.sh
         ...
 
-config.xml Layout
+
+rcubic.xml Layout
 :::::::::::::::::
-Along with the aformentioned layout, RCubic will look for *GROUP_DIR_2* and *GROUP_DIR_3* inside of *GROUP_DIR_1* and parse those scripts to create the dependency tree for deployment. Specifying parameters in the *<config></config>* tags will overwrite any defaults specified in rcubic.xml
+The main configuration file for rcubic specifies the basic settings such as what the working directory is, and where to get the source data.
+
+* *basePath* must point to a writable directory, which can optionally be served by an http server. The files from the *web* directory should be put in the basePath.
+* *gitRepo* can point to a git repository location, or to a directory when *FileMode* is set to *True*.
+* *gerritURL* can point to the base Gerrit URL of where the repository is being cloned from. Links to the code of the scripts will be generated based on that URL, the project, and current git head hash.
+* *listenAddress* is the local bind port for the communicator
+* *listenPortRange* is the port range on which the communicator tries to bind.
+* *baseURL* the URL on which the web directory is served
+* *scriptregex* defines a regular expression scripts must match
+* *SSLKey*, *SSLCert* are used to create an SSL version of the internal communicator.
+* *Token* provides some additional and simple authentication and rejects requests which do not match the token.
+* *resources* specify a list of resources the *ResourceScheduler* will be able to assign to scripts. User *0* for zero, and *-1* for infinity.
 
 ::
 
     <?xml version="1.0"?>
-    <wgr>
+    <rcubic>
+        <config>
+            <!-- SCM settings -->
+            <option name="gitRepo" value="http://git.example.com:8080/p/project"/>
+            <option name="gitBranch" value="master"/>
+            <option name="gerritURL" value="https://gerrit.example.com/" />
+            <option name="gerritProject" value="test.git" />
+            <option name="fileMode" value="False" />
+
+            <!-- Environment settings -->
+            <option name="environment" value="staging"/>
+            <option name="environmentOptions" value="validate staging production"/>
+
+            <!-- Email settings -->
+            <option name="smtpServer" value="localhost"/>
+            <option name="emailSubjectPrefix" value="rcubic:" />
+            <option name="emailFrom" value="user@example.com" />
+            <option name="maxEmailLogSizeKB" value="2" />
+            <option name="notification" value="True"/>
+            <!-- Carbon copy the specified email on all outbound emails
+            <option name="cc" value="user@example.com"/>
+            -->
+
+            <!-- Job settings -->
+            <option name="specialGroups" value="release"/>
+            <option name="specialJobs" value="release_start.sh global_start.sh"/>
+            <!-- When rcubic is run with -A or -a options some jobs can get
+                 disconnected from the tree. When this happens we can specify
+                 what their parent job will be set to.
+            -->
+            <option name="hijackPoint" value="release_start.sh"/>
+
+            <!-- RESTful communication settings -->
+            <option name="listenAddress" value="localhost"/>
+            <option name="listenPortRange" value="31337-31347"/>
+            <!-- Uncomment this to enable secure communication.
+            <option name="SSLKey" value="server.key" />
+            <option name="SSLCert" value="server.crt" />
+            <option name="token" value="123" />
+            -->
+
+            <!-- Web Server integration settings -->
+            <option name="baseURL" value="http://localhost"/>
+            <option name="basePathWeb" value="rcubic" />
+            <!-- HTTP ROOT -->
+            <option name="basePath" value="/srv/http/"/>
+
+            <!-- Job Validation settings -->
+            <option name="defaultRelease" value="default"/>
+            <!-- script must match this regular expression to be considered valid. -->
+            <option name="scriptregex" value=".*"/>
+            <!-- Do no let any job run for longer than this many hours -->
+            <option name="jobExpireTime" value="24"/>
+
+        </config>
+        <resources>
+            <!---1 for infinity, n>=0 for exact quantity-->
+            <option name="default" value="-1" />
+            <option name="network" value="2" />
+            <option name="cpu" value="3" />
+        </resources>
+    </rcubic>
+
+config.xml Layout
+:::::::::::::::::
+Rcubic.xml can be extended with 'revision' specific configuration which will controll which groups will be executed as part of the run. Additionall data can be stored by nesting it in the install element, the parsing of these values is left up to the scripts.
+
+Specifying parameters in the *config* element  will overwrite any defaults specified in rcubic.xml
+
+::
+
+    <?xml version="1.0"?>
+    <rcubic>
         <config>
             <option name="..." value="..." />
         </config>
         <release version="rc1.0">
-            <install group="GROUP_DIR_1" version="rc1.0"/>
+            <install group="GROUP_DIR_1" version="rc1.0">
+                <option name='foo' value='bar'>
+            </install>
             <install group="GROUP_DIR_2" version="rc1.0"/>
             <install group="GROUP_DIR_3" version="rc1.0"/>
         </release>
@@ -125,111 +215,90 @@ Along with the aformentioned layout, RCubic will look for *GROUP_DIR_2* and *GRO
             <product name="PRODUCT" email="email1@example.com"/>
             <product name="GROUP_DIR_1" email="email2@example.com"/>
         </notification>
-    </wgr>
+    </rcubic>
 
-rcubic.xml Layout
-:::::::::::::::::
-* *basePath* must point to a writable directory, which can optionaly be served by an http server. The files from the *web* directory should be put in the basePath. 
-* *gitRepo* can point to a git repository location, or to a directory when *FileMode* is set to *True*. 
-* *gerritURL* can point to the base gerrit url of where the repository is being cloned from. Links to the code of the scripts will be generated based on that url, the project, and current git head hash.
-* *listenAddress* is the local bind port for the communicator
-* *listenPortRange* is the port range on which the communicator tries to bind. 
-* *baseURL* the url on which the web directory is served
-* *scriptregex* defines a regex scripts must match
-* *SSLKey*, *SSLCert* are used to create an SSL version of the internal communicator. 
-* *Token* provides some additional and simple authentication and rejects requests which do not match the token.
-* *resources* specify a list of resources the *ResourceScheduler* will be able to assign to scripts. User *0* for zero, and *-1* for infinity.
+Script Configuration
+::::::::::::::::::::
 
-::
 
-    <?xml version="1.0"?>
-    <wgr>
-        <config>
-            <option name="basePath" value="/srv/http/"/>
-            <option name="archivePath" value="/srv/http/archive" />
-            <option name="hostListLocation" value="hostList"/>
-            <option name="gitRepo" value="http://git.example.com:8080/p/project"/>
-            <option name="gitBranch" value="master"/>
-            <option name="gerritURL" value="https://gerrit.example.com/" />
-            <option name="fileMode" value="False" />
-            <option name="environmentOptions" value="validate currentQA futureQA staging production"/>
-            <option name="specialGroups" value="release"/>
-            <option name="smtpServer" value="localhost"/>
-            <option name="emailSubjectPrefix" value="WGR:" />
-            <option name="emailFrom" value="user@example.com" />
-            <option name="notification" value="True"/>
-            <option name="specialJobs" value="release_start.sh global_start.sh"/>
-            <option name="hijackPoint" value="release_start.sh"/>
-            <option name="listenAddress" value="localhost"/>
-            <option name="listenPortRange" value="31337-31347"/>
-            <option name="baseURL" value="http://localhost"/>
-            <option name="jobExpireTime" value="24"/>
-            <option name="defaultRelease" value="default"/>
-            <option name="environment" value="environment"/>
-            <!-- scriptregex defines things a script must match -->
-            <option name="scriptregex" value="^[^#]*source\s+\.\./(helper\.sh|recipes/[^\s]*\.sh)"/>
-            <option name="SSLKey" value="server.key" />
-            <option name="SSLCert" value="server.crt" />
-            <option name="token" value="123" />
-        </config>
-        <resources>
-            <option name="default" value="-1" />
-            <option name="network" value="2" />
-            <option name="cpu" value="3" />
-       </resources>
-    </wgr>
-
-Script Layout
-:::::::::::::
+Script Format
+'''''''''''''
 #. Shebang (*#!/bin/bash*)
 #. header
-#. action script
+#. action
 
 Header
-::::::
+''''''
 * **#PRODUCT:**
   describes which application is being released. Used for sending notifications.
 * **#HDEP:**
   hard dependency, describes which scripts this script depends on. They hard dependency scripts must exist (at selection), else the sequence will be considered invalid.
 * **#SDEP:**
-  soft depenendency, the script does not have to be selected. If it is selected, the order is enforced.
+  soft dependency, the script does not have to be selected. If it is selected, the order is enforced.
+* **#CDEP:**
+  child dependency, is just like SDEP but it specifies what scripts cannot start until this script completes.
+* **#PHASE:**
+  
 * **#RESOURCES:**
   the resources the script is requesting before it can run. If the script requests resources that do not exist in *rcubic.xml*, they will be ignored. Otherwise the job will not run until resources are available.
 
 Header usage recommendations
-::::::::::::::::::::::::::::
+''''''''''''''''''''''''''''
 * It is good practice to use the SDEP field to define dependencies on scripts outside a particular group. This will allow for the deployment of one group without the other.
 
 * In the general case, group should not have HDEP fields pointing to scripts outside a group. If this is necessary, then perhaps it is a hint that group should be merged.
 
-* The **#RESOURCES:** header should be used to limit the amount of concurrently running jobs that require a specific resource, if they require a large portion of that resource. The *default* header is added to every job automaically. For example, if a job has the *network* field in the header and *rcubic.xml* has a limit of 2 on that resource, only such jobs will be able to run at once.
+* The **#RESOURCES:** header should be used to limit the amount of concurrently running jobs that require a specific resource, if they require a large portion of that resource. The *default* header is added to every job automatically. For example, if a job has the *network* field in the header and *rcubic.xml* has a limit of 2 on that resource, only 2 such jobs will be able to run at once.
 
 Usage
 `````
 
 Basic execution
 :::::::::::::::
-*RCubic.py -r RELEASE_DIR -e ENVIRONMENT*
-
-Validation
-::::::::::
-If *Rcubic.py* is run with the *-v* flag, the program will validate the script headers, output a dependency graph, and exit. This is useful for validating the dependency tree.
+*RCubic.py -r REVISION_DIR -e ENVIRONMENT*
 
 Groups
 ::::::
+Minimal
+
 A group is a directory of scripts. It is good practice to put all scripts which have hard dependencies with one another in the same directory. Cross-group dependencies should be soft dependencies.
+
+Pre-execution Validation
+::::::::::::::::::::::::
+Before starting up the execution sequence RCubic will run the built in validation which checks for the following:
+
+* Dependency definitions describe a connected, acyclic graph.
+
+* All selected groups are comprised of at least one script.
+
+* Scripts are descendant of configured entry-point script (specialJob).
+
+* Scripts of all selected groups are executable.
+
+* Matches the configured regular expression pattern (scriptregex).
+
+* Script have all the required
+
+* All defined product definitions have a accompanying contact in the release specific config.xml
+
+Should any of these test fail RCubic will exit without ever starting the execution sequence. By passing in the *-v* flag, validation will be invoked without starting execution sequence whether or not validation passes.
+
+In addition to these test RCubic will also draw a dependency graph which can used to visually inspect all the dependencies.
+
+
+Validation can be customized by placing scripts into the validation directory. Then, when RCubic is called with *-V* or *--extval* flags all scripts will be executed. If any of the scripts exit with non-zero code, it will be counted as failure, RCubic will exit without starting the execution sequence. Validation scripts will be passed 3 arguments: Environment, Revision string, space separated list of all selected groups.
 
 Session mode
 ::::::::::::
-* Allows for multiple RCubic instances to run in parallel. All generated and checked-out files are put in a dated work directory to ensure seperate sessions do not overlap files.
+* Allows for multiple RCubic instances to run in parallel. All generated and checked-out files are put in a dated work directory to ensure separate sessions do not overlap files.
 
 * If any script fails, the rest will be canceled automatically, so as to not block automated builds.
 
 Foreground mode
 :::::::::::::::
-* By default, RCubic will run in semi-daemonized mode, where it forks off into the background and redirects stdout/stderr to a log file.
+* By default, RCubic will run in semi-daemonized mode, where it forks off into the background and redirects stdout/stderr to a log file. Passing in the *-f* flag alters this behavior.
 
-* With foreground mode, no logging is done and everything is printed to the console. RCubic will not check to see whether a group has been deployed or not.
+* With foreground mode, events and error messages are printed to the console. RCubic will not check to see whether a group has been deployed or not.
 
 Web Interface
 :::::::::::::
@@ -249,11 +318,11 @@ Web Interface
 
 * Clicking on a node, will bring up a popup menu.
 
-  - Clicking on "Log", will open a JQueryUI Dialog, which uses bash syntax hilighting to show the output log for that script
+  - Clicking on "Log", will open a JQueryUI Dialog, which uses bash syntax highlighting to show the output log for that script
 
   - Clicking on "Code", when using *fileMode* will open the code in a similar way.
 
-  - Clicking on "Code", whien not using *fileMode* will open a gerrit link to that file based on the project/branch/hash, and *gerritURL* in *rcubic.xml*
+  - Clicking on "Code", when not using *fileMode* will open a Gerrit link to that file based on the project/branch/hash, and *gerritURL* in *rcubic.xml*
 
 Graph Legend
 ::::::::::::
@@ -278,10 +347,10 @@ Graph Legend
     + Dark Orange: script blocked waiting for resource
 
   - Stroke:
-   
+
     + Black: nominal
 
-    + Blue: job overrrides default sequence
+    + Blue: job overrides default sequence
 
     + Gray: job is not defined, but also not required (soft dependency)
 
@@ -291,10 +360,10 @@ Graph Legend
 
 * Edges (dependency)
 
-  - Palegreen: Soft dependency, script does not exist. Dependency will not be fulfilled.
+  - Pale Green: Soft dependency, script does not exist. Dependency will not be fulfilled.
 
-  - Green: Soft dependency, script exists. Dependency will be fullfilled.
+  - Green: Soft dependency, script exists. Dependency will be fulfilled.
 
-  - Red: Hard dependency, script does not exist. Dependency will not be fullfilled and validation will fail.
+  - Red: Hard dependency, script does not exist. Dependency will not be fulfilled and validation will fail.
 
-  - Blue: Hard depdendency, script exists. Dependency will be fullfilled.
+  - Blue: Hard dependency, script exists. Dependency will be fulfilled.
