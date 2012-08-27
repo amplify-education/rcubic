@@ -7,7 +7,7 @@ class RCubicClient(RESTClient):
 
     def __init__(self, server='localhost', port=8002, *args, **kwargs):
         """Create a RCubicClient to connect to a server.
-        
+
         Keyword arguments:
         server -- domain to connect to (default 'localhost')
         port -- the port to connect to (default 8002)

@@ -1,7 +1,9 @@
 import os, re, gevent, subprocess, logging, fnmatch
 import simplejson
 from RCubic.ScriptStatus import Status
-from RCubic.RCubicUtilities import log, popenNonblock, ConfigurationError, FatalRuntimeError 
+from RCubic.RCubicUtilities import popenNonblock, ConfigurationError, FatalRuntimeError
+
+import logging
 
 class ReleaseScriptManager(object):
 	def __init__(self, rcubic):
@@ -32,7 +34,7 @@ class ReleaseScriptManager(object):
 		tmp = self.find(releaseScript.name)
 		if tmp:
 			self.remove(tmp)
-			log("overriding %s" %(releaseScript.name))
+			logging.info("overriding %s" %(releaseScript.name))
 			releaseScript.setOverride()
 		self.releaseScripts.append(releaseScript)
 		if len(releaseScript.name) > self.longestName:
@@ -133,12 +135,12 @@ class ReleaseScriptManager(object):
 				#script has some 'active' dependencies.
 				rs.dagPass = True
 			else:
-				log("gparents of %s: %s" %(rs.name, rs.gparent), logging.DEBUG)
+				logging.debug("gparents of %s: %s" %(rs.name, rs.gparent))
 				firstJobs.append(rs.name)
 				if rs.name in self.specialJobs:
 					rs.dagPass = True
 		if len(firstJobs) > 1:
-			log("DAG is disconnected. First jobs: %s" % firstJobs, logging.DEBUG)
+			logging.debug("DAG is disconnected. First jobs: %s" % firstJobs)
 			return False
 		return True
 
@@ -304,7 +306,7 @@ class ReleaseScript(object):
 			event.wait()
 
 		if self.status == Status.CANCELLED:
-			log("Cancelled job %s" % self.name, logging.INFO)
+			logging.info("Cancelled job %s" % self.name)
 			return False
 
 		self.gitHead = rcubic.gitHead

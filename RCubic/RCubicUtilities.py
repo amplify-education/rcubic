@@ -1,21 +1,8 @@
-import os, sys, time, subprocess, re, logging, errno, fcntl
+import os, sys, time, subprocess, re, errno, fcntl
 import sqlite3
 import gevent
 from gevent import (event, server, socket)
 from ScriptStatus import Status
-
-def log(msg, level=logging.WARNING):
-	'''Log to a specified logger. Break strings into lines. Accepts liss.'''
-	LOGGER = logging.getLogger('')
-	if type(msg) is str or type(msg) is list:
-		if type(msg) is str:
-			lines = msg.splitlines()
-		elif type(msg) is list:
-			lines = msg
-		for line in lines:
-			LOGGER.log(level, line)
-	else:
-		LOGGER.log(level, msg)
 
 def popenNonblock(args, data='', stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, cwd=None, logFile=None):
 	"""Communicate with the process non-blockingly.

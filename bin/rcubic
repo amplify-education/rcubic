@@ -34,7 +34,7 @@ from email.mime.text import MIMEText
 from RCubic.RESTCommunicator import RESTCommunicator
 from RCubic.ResourceScheduler import ResourceScheduler
 from RCubic.ReleaseScript import Status, ReleaseScriptManager, ReleaseScript
-from RCubic.RCubicUtilities import log, popenNonblock, ConfigurationError, FatalRuntimeError, LogToDB
+from RCubic.RCubicUtilities import popenNonblock, ConfigurationError, FatalRuntimeError, LogToDB
 #######
 
 #third party libraries:
@@ -55,7 +55,7 @@ class RcubicNotification(object):
 
 	def disable(self):
 		if self.enabled == True:
-			log("Notifications have been disabled.", logging.DEBUG)
+			logging.debug("Notifications have been disabled.")
 		self.enabled = False
 
 	def addProductEmail(self, product, email):
@@ -80,7 +80,7 @@ class RcubicNotification(object):
 			smtp.sendmail(self.emailFrom, recipients, msg.as_string())
 			smtp.quit()
 		except:
-			log("Sending email failed! Message: %s" % msg, logging.ERROR)
+			logging.error("Sending email failed! Message: %s" % msg)
 
 	def processQueue(self):
 		try:
@@ -185,11 +185,11 @@ class Rcubic(object):
 
 		valid = self.validate()
 		if valid != True:
-			log("Validation failure:\n%s" %(valid), logging.ERROR)
+			logging.error("Validation failure:\n%s" %(valid))
 			raise ConfigurationError("Encountered Validation error. See above for cause of failure.")
 
 		if self.environment not in self.config["environmentOptions"]:
-			log("environmentOptions: %s" %self.config["environmentOptions"], logging.ERROR)
+			logging.error("environmentOptions: %s" %self.config["environmentOptions"])
 			raise ConfigurationError("Invalid environment specified")
 
 		if not self._verifyNotificationGroups():
@@ -262,7 +262,7 @@ class Rcubic(object):
 				self.gitHead = processResult[1].rstrip()
 
 				#subprocess.call(['git', 'log', '-1', '--format="%H"'], cwd=self.gitDir, stdout=githash) #todo:save hash
-			log("Git repo has been updated")
+			logging.info("Git repo has been updated")
 			return True
 		else:
 			# Copy the directory
@@ -291,7 +291,7 @@ class Rcubic(object):
 		self.aisFilter = dict()
 
 		if self.opts.ais and self.opts.skipAis:
-			log("conflicting options selected skip and select ais. Will honnor only select.")
+			logging.info("conflicting options selected skip and select ais. Will honnor only select.")
 
 		if self.opts.ais:
 			self.aisFilter["positiveFilter"] = True
@@ -341,7 +341,7 @@ class Rcubic(object):
 				tURL = tURL + '/'
 			self.fullURL = "%s/%s?prefix=%swork" %(self.config["baseURL"], self.config["basePathWeb"], tURL)
 			self.baseURL = "%s/%s" %(self.config["baseURL"], self.config["basePath"][len(self.originalBasePath):])
-		log("URL: %s" % self.fullURL, logging.INFO)
+		logging.info("URL: %s" % self.fullURL)
 
 		fileMap = { "fdotFile":"full.dot", "fpngFile":"full.png", "adotFile":"arb.dot",
 					"asvgFile":"arb.svg", "pidFile":"rcubic.pid", "logFile":"rcubic.log",
@@ -463,7 +463,7 @@ class Rcubic(object):
 				if self.log.isNewestVersion(group, version):
 					toInstall = True
 				else:
-					log("Skipping %s a version greater than or equal %s is installed." %(group, version))
+					logging.info("Skipping %s a version greater than or equal %s is installed." %(group, version))
 
 			installed = 0
 			if toInstall:
@@ -477,7 +477,7 @@ class Rcubic(object):
 		for g in self.groupSelect:
 			if not g in toInstallGroups:
 				raise ConfigurationError("Group %s is not in the configuration" % g)
-		log("Installing groups %s." % " ".join(sorted(toInstallGroups)), logging.INFO)
+		logging.info("Installing groups %s." % " ".join(sorted(toInstallGroups)))
 
 		if self.aisFilter:
 			self._aisHijack()
@@ -490,7 +490,7 @@ class Rcubic(object):
 			try:
 				self.notification.addProductEmail(product.attrib["name"], product.attrib["email"])
 			except KeyError:
-				log("Element on line %i of %s is missing an attribute." %(product.sourceline, product.base), logging.ERROR)
+				logging.error("Element on line %i of %s is missing an attribute." %(product.sourceline, product.base))
 				return 0
 			count += 1
 		return count
@@ -501,7 +501,7 @@ class Rcubic(object):
 			for product in rs.products:
 				if not self.notification.isProductConfigured(product):
 					exit = False
-					log("'%s' references notification group '%s' which is not defined" %(rs.script, product), logging.ERROR)
+					logging.error("'%s' references notification group '%s' which is not defined" %(rs.script, product))
 		return exit
 
 	def _verifyBasePath(self):
@@ -572,7 +572,7 @@ class Rcubic(object):
 			return errorMessages
 
 	def _updateGraph(self, updateDot=False):
-		log("Update graph called", logging.DEBUG)
+		logging.debug("Update graph called")
 		try:
 			meta = [
 					#fullpng takes too long to render
@@ -600,18 +600,18 @@ class Rcubic(object):
 	def _updateProgress(self, scriptName, version, kind, message):
 		rs = self.rsm.find(scriptName)
 		if not rs:
-			log("received message with unmatched script. (%s, %s)" %(scriptName, version), logging.ERROR)
+			logging.error("received message with unmatched script. (%s, %s)" %(scriptName, version))
 			return False
 		if rs.version != version:
-			log("received message with unmatched version. (%s, %s)" %(scriptName, version), logging.ERROR)
+			logging.error("received message with unmatched version. (%s, %s)" %(scriptName, version))
 			return False
 		if kind == "PROGRESS":
 			if not rs.updateProgress(message):
-				log("received message with invalid progress message. (%s, %s, %s)" %(scriptName, version, message), logging.ERROR)
+				logging.error("received message with invalid progress message. (%s, %s, %s)" %(scriptName, version, message))
 				return False
 			self.signalEvent.set()
 		else:
-			log("received message with unknown message type (%s)." %(kind), logging.ERROR)
+			logging.error("received message with unknown message type (%s)." %(kind))
 			return False
 		return True
 
@@ -644,13 +644,13 @@ class Rcubic(object):
 		#TODO: remove this and just call the RSM one
 		#signum and frame are needed as they are passed up from threading class.
 		if self.abortSent:
-			log("Abort already sent to all jobs.", logging.ERROR)
-			log("jobs: %s" % self.rsm, logging.DEBUG)
+			logging.error("Abort already sent to all jobs.")
+			logging.debug("jobs: %s" % self.rsm)
 			return
 		else:
 			self.abortSent = True
 
-		log("Aborting all jobs. Please be patient.", logging.INFO)
+		logging.info("Aborting all jobs. Please be patient.")
 		self.rsm.abortJobs()
 
 	def processEvents(self):
@@ -671,7 +671,7 @@ class Rcubic(object):
 					if self.rsm.isSuccess():
 						break
 				if time.time() > expireTime:
-					log("Tired of waiting for jobs to exit. Aborting.", logging.ERROR)
+					logging.error("Tired of waiting for jobs to exit. Aborting.")
 					self.abort()
 					break
 		self.communicator.stop()
@@ -689,7 +689,7 @@ class Rcubic(object):
 					shutil.copy(f, uDir)
 				if(not self.opts.validate):
 					shutil.copytree("%s/%s" % (self.config["basePath"], "work/log"), "%s/%s" % (uDir,"log"))
-				log("Copied files to: %s" % (uDir), logging.INFO)
+				logging.info("Copied files to: %s" % (uDir))
 
 				tURL = "archive/%s" % uid
 				if(len(tURL) > 0):
@@ -699,16 +699,16 @@ class Rcubic(object):
 				else:
 					bpw = self.config["basePathWeb"]
 				fullURL = "%s%s/?prefix=%s" %(self.config["baseURL"], bpw, tURL)
-				log("Job archive available at: %s" % (fullURL), logging.INFO)
+				logging.info("Job archive available at: %s" % (fullURL))
 		except:
-			log("Something went wrong while trying to copy files to archive: %s" % (str(sys.exc_info())), logging.ERROR)
+			logging.error("Something went wrong while trying to copy files to archive: %s" % (str(sys.exc_info())))
 
 		if self.opts.sessionMode:
 			try:
 				shutil.rmtree("%s/%s" % (self.config["basePath"], "work/git"))
-				log("Removed git directory from session folder.", logging.INFO)
+				logging.info("Removed git directory from session folder.")
 			except:
-				log("Something went wrong when trying to remove git directory from session folder: %s" % (str(sys.exc_info())), logging.ERROR)
+				logging.error("Something went wrong when trying to remove git directory from session folder: %s" % (str(sys.exc_info())))
 
 
 	def run(self):
@@ -734,7 +734,7 @@ class Rcubic(object):
 		jobs.extend([gevent.spawn(self.communicator.start,block=False), gevent.spawn(self.processEvents)])
 		# Starts non-blocking so we can get port
 		self.communicator.start(block=False)
-		log("Server started at %s:%s" % (self.communicator.bind, self.communicator.port), logging.INFO)
+		logging.info("Server started at %s:%s" % (self.communicator.bind, self.communicator.port))
 		self.token = self.communicator.token
 		self.port = self.communicator.port
 		gevent.joinall(jobs)
@@ -745,7 +745,7 @@ class Rcubic(object):
 		self.cleanup()
 
 		if not self.rsm.isDone():
-			log("exited with orphaned jobs", logging.ERROR)
+			logging.error("exited with orphaned jobs")
 			return False
 		return self.rsm.isSuccess()
 
@@ -788,12 +788,12 @@ if __name__ == "__main__":
 	try:
 		rcubic = Rcubic(opts)
 	except ConfigurationError as ce:
-		log(ce, logging.ERROR)
-		log("Encountered configuration error. See above for cause of failure.", logging.ERROR)
+		logging.error(ce)
+		logging.error("Encountered configuration error. See above for cause of failure.")
 		sys.exit(2)
 
 	if opts.validate:
-		log("Passed Validation!", logging.INFO) #This won't be reached if errors are found.
+		logging.info("Passed Validation!") #This won't be reached if errors are found.
 		sys.exit(0)
 
 	signal.signal(signal.SIGTERM, rcubic.abort)

@@ -1,5 +1,9 @@
+# vim: ts=4 noet filetype=python
 # RESTServer imports
 from MiniREST.RESTServer import RESTServer, responseCodes, responseTypes
+
+import logging
+
 class RESTCommunicator(RESTServer):
 	"""RESTCommunicator - creates a new RESTCommunicator instance.
 	Extends RESTServer with custom functions.
@@ -31,6 +35,7 @@ class RESTCommunicator(RESTServer):
 		env -- expects a 'data' list TODO: paramaters
 
 		"""
+		logging.debug("Received Progress report (%s) for %s: %s" %(post['kind'], post['scriptName'], post['message']))
 		resp = self.rcubic._updateProgress(post['scriptName'], post['version'], post['kind'], post['message'])
 		start_response(responseCodes[200], responseTypes['plaintext'])
 		return str(resp)
@@ -42,6 +47,7 @@ class RESTCommunicator(RESTServer):
 		env -- doesn't expect any paramaters
 
 		"""
+		logging.info("Received reclone request")
 		resp = self.rcubic._initGit()
 		start_response(responseCodes[200], responseTypes['plaintext'])
 		return str(resp)
@@ -54,9 +60,11 @@ class RESTCommunicator(RESTServer):
 
 		"""
 		scriptName = post['scriptName']
+		logging.info("Received reschedule request for %s." % scriptName)
 		resp = self.rcubic.reschedule(scriptName)
 		start_response(responseCodes[200], responseTypes['plaintext'])
 		if not resp:
+			logging.warning("Reschedule request for %s failed." % post['scriptName'])
 			return str(False)
 		return str(True)
 
@@ -68,9 +76,11 @@ class RESTCommunicator(RESTServer):
 
 		"""
 		scriptName = post['scriptName']
+		logging.info("Received override request for %s." % scriptName)
 		resp = self.rcubic.manualOverride(scriptName)
 		start_response(responseCodes[200], responseTypes['plaintext'])
 		if not resp:
+			logging.warning("Override request for %s failed." % scriptName)
 			return str(False)
 		return str(True)
 
