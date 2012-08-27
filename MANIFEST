@@ -1,10 +1,8 @@
 setup.py
-RCubic.run
-featureSupported.py
-manualOverride.py
-rescheduleScript.py
-updateProgress.py
-waitForCheckIns.py
+bin/rcubic
+bin/rcubic-checkin
+bin/rcubic-cli
+bin/rcubic-migratedb
 RCubic/BotClient.py
 RCubic/RCubicClient.py
 RCubic/RCubicServer.py
