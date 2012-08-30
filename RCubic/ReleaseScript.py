@@ -307,6 +307,7 @@ class ReleaseScript(object):
 
 		if self.status == Status.CANCELLED:
 			logging.info("Cancelled job %s" % self.name)
+			rcubic.refreshStatus(self)
 			return False
 
 		self.gitHead = rcubic.gitHead

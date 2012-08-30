@@ -114,8 +114,7 @@ class Rcubic(object):
 		# this is a regex to fix that
 		self.fixCoord = re.compile(' (?=[\d]*,[\d]*)')
 		self.gitHead = ""
-		#Special groups are always selected, even if not passed through -g however they are not counted toward number of groups to install
-		#self.config["specialGroups"] = ["release"] #Now self.config["specialGroups"]
+		self.token = None
 		baseConfigReq = [ "basePath", "hostListLocation", "gitRepo", "fileMode", "gerritURL", "gerritProject", "basePathWeb",
 						  "environmentOptions", "specialGroups", "specialJobs",
 						  "listenAddress", "listenPortRange", "jobExpireTime",
@@ -655,6 +654,7 @@ class Rcubic(object):
 
 	def processEvents(self):
 		#We sleep here to give socket server some time to init
+		#TODO: use event set in communicator to let us know that its ready
 		gevent.sleep(1)
 
 		expireTime = time.time() + 3600 * self.config["jobExpireTime"]
@@ -664,7 +664,7 @@ class Rcubic(object):
 					self.signalEvent.clear()
 					self._updateGraph()
 					self.notification.processQueue()
-				if self.opts.foreground:
+				if self.opts.foreground or self.abortSent:
 					if self.rsm.isDone():
 						break
 				else:
@@ -733,7 +733,7 @@ class Rcubic(object):
 		jobs = [gevent.spawn(rsei) for rsei in rse]
 		jobs.extend([gevent.spawn(self.communicator.start,block=False), gevent.spawn(self.processEvents)])
 		# Starts non-blocking so we can get port
-		self.communicator.start(block=False)
+		#self.communicator.start(block=False)
 		logging.info("Server started at %s:%s" % (self.communicator.bind, self.communicator.port))
 		self.token = self.communicator.token
 		self.port = self.communicator.port
