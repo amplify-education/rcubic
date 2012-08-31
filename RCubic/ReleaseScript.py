@@ -294,9 +294,8 @@ class ReleaseScript(object):
 
 		#Since queue is also used to re-schedule we need to be carefull about
 		#what jobs we can start. Either never started or failed ones.
-		#if self.status != Status.FAILED or self.status != Status.NONE:
-		#	print("error, status is %s" % self.status)
-		if self.status == Status.SUCCEEDED:
+		if self.status != Status.FAILED and self.status != Status.NONE:
+			logging.debug("error, status is %s" % self.status)
 			return False
 
 		self.status = Status.QUEUED
