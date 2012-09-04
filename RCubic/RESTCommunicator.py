@@ -47,10 +47,11 @@ class RESTCommunicator(RESTServer):
 		super(RESTCommunicator, self).__init__(bind, port, *args, **kwargs)
 		self.registerFunction('progress', self._progress, token=True)
 		self.registerFunction('reclone', self._reclone, token=True)
+		self.registerFunction('cancel', self._cancel, token=True)
 		self.registerFunction('reschedule', self._reschedule, token=True)
 		self.registerFunction('manualOverride', self._manualOverride, token=True)
 		self.registerFunction('supported', self._supported, token=True)
-		self.features = ['progress', 'reclone', 'reschedule', 'manualOverride']
+		self.features = ['progress', 'reclone', 'reschedule', 'manualOverride', 'cancel']
 		self.rcubic = rcubic
 
 	def _progress(self, env, start_response, post):
@@ -122,3 +123,15 @@ class RESTCommunicator(RESTServer):
 			return str(True)
 		else:
 			return str(False)
+
+	def _cancel(self, env, start_response, post):
+		"""Responds to a 'cancel' request and calls rcubic.abort()
+
+		Keyword arguments:
+		env -- doesn't expect any paramaters
+
+		"""
+		logging.info("Received reclone request")
+		resp = self.rcubic.abort()
+		start_response(responseCodes[200], responseTypes['plaintext'])
+		return str(resp)

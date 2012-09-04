@@ -536,7 +536,6 @@ class Rcubic(object):
 	def reschedule(self, scriptName):
 		response = self.rsm.find(scriptName)
 		if not response:
-			print("TODO")
 			return False
 		gevent.spawn(response.queue)
 		return True

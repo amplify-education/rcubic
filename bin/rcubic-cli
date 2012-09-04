@@ -55,6 +55,10 @@ def reclone(args):
 	client = RCubicClient(server=args.addr, port=args.port, CACert=args.cacert, token=args.token)
 	return client.reclone() == "True"
 
+def cancel(args):
+	client = RCubicClient(server=args.addr, port=args.port, CACert=args.cacert, token=args.token)
+	return client.cancel() == "True"
+
 
 parser = argparse.ArgumentParser(description='Tool to interact with running rcubic instance.')
 
@@ -79,6 +83,9 @@ parser_reschedule.set_defaults(func=reschedule)
 
 parser_reclone = subparsers.add_parser('reclone', help='Tell RCubic to update the git repo checkout')
 parser_reclone.set_defaults(func=reclone)
+
+parser_cancel = subparsers.add_parser('cancel', help='Abort RCubic instance. Cancel all job unstarted jobs wait for all the started ones to finish.')
+parser_cancel.set_defaults(func=cancel)
 
 parser.add_argument('--port', dest='port', default=8002, help='Port on which RCubic is listening', type=int)
 parser.add_argument('--addr', dest='addr', default='localhost', help='Address on which RCubic is listening')

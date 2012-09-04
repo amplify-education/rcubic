@@ -84,3 +84,9 @@ class RCubicClient(RESTClient):
 
         """
         return self.getResponse("supported", data = {"feature": feature, "token": self.token}, *args, **kwargs)
+
+    def cancel(self, *args, **kwargs):
+        """
+        Asks server to gracefully exit.
+        """
+        return self.getResponse("cancel", data = {"token":self.token }, *args, **kwargs)
