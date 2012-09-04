@@ -237,11 +237,6 @@ class Rcubic(object):
 			except OSError:
 				pass
 
-			try:
-				os.makedirs("%s/work/log" % (self.config["basePath"]))
-			except OSError:
-				pass
-
 			if not os.access(self.gitDir, os.W_OK):
 				raise FatalRuntimeError("ERROR: '%s' does not have write access." %self.gitDir)
 
@@ -349,20 +344,21 @@ class Rcubic(object):
 				groupDirString = "all"
 			self.config["basePath"] = "%s/%s_%s" %(self.config["basePath"], uuid.uuid1(), groupDirString)
 
-		self.gitDir = "%s/work/git" %self.config["basePath"]
+		self.logDir = "%s/work/log" % (self.config["basePath"])
+		self.gitDir = "%s/work/git" % self.config["basePath"]
 		if self.opts.release:
 			self.config["defaultRelease"] = self.opts.release
-		self.releaseDir = "%s/%s" %(self.gitDir, self.config["defaultRelease"])
-		self.aisOverrideDir = "%s/override" %(self.releaseDir)
-		self.aisDir = "%s/release" %(self.gitDir)
-		self.validationDir = "%s/validation" %(self.gitDir)
+		self.releaseDir = "%s/%s" % (self.gitDir, self.config["defaultRelease"])
+		self.aisOverrideDir = "%s/override" % (self.releaseDir)
+		self.aisDir = "%s/release" % (self.gitDir)
+		self.validationDir = "%s/validation" %( self.gitDir)
 
 		if "baseURL" in self.config:
 			#self.fullURL = "%s/%s/work" %(self.config["baseURL"], self.config["basePath"][len(self.originalBasePath):])
-			tURL = self.config["basePath"][len(self.originalBasePath):]
-			if(len(tURL) > 0):
-				tURL = tURL + '/'
-			self.fullURL = "%s/%s?prefix=%swork" %(self.config["baseURL"], self.config["basePathWeb"], tURL)
+			workpath = self.config["basePath"][len(self.originalBasePath):]
+			if(len(workpath) > 0):
+				workpath = workpath + '/'
+			self.fullURL = "%s/%s?prefix=%swork" %(self.config["baseURL"], self.config["basePathWeb"], workpath)
 			self.baseURL = "%s/%s" %(self.config["baseURL"], self.config["basePath"][len(self.originalBasePath):])
 		logging.info("URL: %s" % self.fullURL)
 
@@ -703,25 +699,25 @@ class Rcubic(object):
 		try:
 			if(not self.opts.sessionMode):
 				uid = uuid.uuid1()
-				uDir = "%s/%s" % (self.config["archivePath"], uid)
-				os.makedirs(uDir)
+				archiveDir = "%s/%s" % (self.config["archivePath"], uid)
+				os.makedirs(archiveDir)
 				files = [ self.config['adotFile'], self.config['asvgFile'], self.config['njsonFile'] ]
 				if not self.opts.foreground and not self.opts.validate:
 					files.append(self.config['logFile'])
 				for f in files:
-					shutil.copy(f, uDir)
+					shutil.copy(f, archiveDir)
 				if(not self.opts.validate):
-					shutil.copytree("%s/%s" % (self.config["basePath"], "work/log"), "%s/%s" % (uDir,"log"))
-				logging.info("Copied files to: %s" % (uDir))
+					shutil.copytree("%s/%s" % (self.config["basePath"], "work/log"), "%s/%s" % (archiveDir,"log"))
+				logging.info("Copied files to: %s" % (archiveDir))
 
-				tURL = "archive/%s" % uid
-				if(len(tURL) > 0):
-					tURL = tURL + '/'
+				archiveURL = "archive/%s" % uid
+				if(len(archiveURL) > 0):
+					archiveURL = archiveURL + '/'
 				if(self.config["basePathWeb"] != ""):
 					bpw = "/" + self.config["basePathWeb"]
 				else:
 					bpw = self.config["basePathWeb"]
-				fullURL = "%s%s/?prefix=%s" %(self.config["baseURL"], bpw, tURL)
+				fullURL = "%s%s/?prefix=%s" %(self.config["baseURL"], bpw, archiveURL)
 				logging.info("Job archive available at: %s" % (fullURL))
 		except:
 			logging.error("Something went wrong while trying to copy files to archive: %s" % (str(sys.exc_info())))
@@ -737,11 +733,21 @@ class Rcubic(object):
 	def run(self):
 		time.sleep(1) #Sleep to let stdout get re-assigned on daemonization fork
 
-		#TODO: this is a hack
+		#In session mode logging to DB makes little sense as it will never be re-used. Instead we just log to memory.
 		if self.opts.sessionMode:
 			self.log = LogToDB(":memory:")
 		else:
 			self.log = LogToDB(self.config["auditLog"])
+
+		#Cleanup and setup log directory.
+		try:
+			shutil.rmtree(self.logDir)
+		except:
+			logging.exception("Failed to clean up log directory")
+		try:
+			os.makedirs(self.logDir)
+		except OSError:
+			pass
 
 		self._updateGraph()
 		if self.config["SSLKey"] == "" or self.config["SSLCert"] == "":
