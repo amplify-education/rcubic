@@ -729,10 +729,11 @@ class Rcubic(object):
 			self.log = LogToDB(self.config["auditLog"])
 
 		#Cleanup and setup log directory.
-		try:
-			shutil.rmtree(self.logDir)
-		except:
-			logging.exception("Failed to clean up log directory")
+		if not self.opts.sessionMode:
+			try:
+				shutil.rmtree(self.logDir)
+			except:
+				logging.exception("Failed to clean up log directory")
 		try:
 			os.makedirs(self.logDir)
 		except OSError:
@@ -752,10 +753,10 @@ class Rcubic(object):
 		jobs.extend([gevent.spawn(self.communicator.start,block=False), gevent.spawn(self.processEvents)])
 		# Starts non-blocking so we can get port
 		#self.communicator.start(block=False)
+		gevent.joinall(jobs)
 		logging.info("Server started at %s:%s" % (self.communicator.bind, self.communicator.port))
 		self.token = self.communicator.token
 		self.port = self.communicator.port
-		gevent.joinall(jobs)
 		time.sleep(5)
 		self._updateGraph(updateDot=True)
 		self.notification.processQueue()
