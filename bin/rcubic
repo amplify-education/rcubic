@@ -139,7 +139,7 @@ class Rcubic(object):
 		self.fixCoord = re.compile(' (?=[\d]*,[\d]*)')
 		self.gitHead = ""
 		self.token = None
-		baseConfigReq = [ "basePath", "hostListLocation", "gitRepo", "fileMode", "gerritURL", "gerritProject", "basePathWeb",
+		baseConfigReq = [ "basePath", "hostListLocation", "gitRepo", "fileMode", "gerritURL", "gerritProject",
 						  "environmentOptions", "specialGroups", "specialJobs",
 						  "listenAddress", "listenPortRange", "jobExpireTime",
 						  "smtpServer", "emailSubjectPrefix", "emailFrom", "maxEmailLogSizeKB",
@@ -331,11 +331,6 @@ class Rcubic(object):
 
 	def _initPaths(self):
 		self.originalBasePath = self.config["basePath"]
-		if(self.config["basePathWeb"] != ""):
-			bpw = "/" + self.config["basePathWeb"]
-		else:
-			bpw = ""
-		self.config["basePath"] = "%s%s" % (self.config["basePath"], bpw)
 		self.config["archivePath"] = "%s/archive/" % (self.config["basePath"])
 		if self.opts.sessionMode:
 			if self.groupSelect != []:
@@ -344,23 +339,24 @@ class Rcubic(object):
 				groupDirString = "all"
 			self.config["basePath"] = "%s/%s_%s" %(self.config["basePath"], uuid.uuid1(), groupDirString)
 
-		self.logDir = "%s/work/log" % (self.config["basePath"])
+		self.logDir = "%s/work/log" % self.config["basePath"]
 		self.gitDir = "%s/work/git" % self.config["basePath"]
 		if self.opts.release:
 			self.config["defaultRelease"] = self.opts.release
 		self.releaseDir = "%s/%s" % (self.gitDir, self.config["defaultRelease"])
-		self.aisOverrideDir = "%s/override" % (self.releaseDir)
-		self.aisDir = "%s/release" % (self.gitDir)
-		self.validationDir = "%s/validation" %( self.gitDir)
+		self.aisOverrideDir = "%s/override" % self.releaseDir
+		self.aisDir = "%s/release" % self.gitDir
+		self.validationDir = "%s/validation" % self.gitDir
 
 		if "baseURL" in self.config:
-			#self.fullURL = "%s/%s/work" %(self.config["baseURL"], self.config["basePath"][len(self.originalBasePath):])
 			workpath = self.config["basePath"][len(self.originalBasePath):]
-			if(len(workpath) > 0):
-				workpath = workpath + '/'
-			self.fullURL = "%s/%s?prefix=%swork" %(self.config["baseURL"], self.config["basePathWeb"], workpath)
-			self.baseURL = "%s/%s" %(self.config["baseURL"], self.config["basePath"][len(self.originalBasePath):])
-		logging.info("URL: %s" % self.fullURL)
+			self.baseURL = "%s" %self.config["baseURL"]
+			try:
+				self.pathURL = re.search('(?<=[^/:])/.*', self.baseURL).group(0)
+			except AttributeError:
+				self.pathURL = ""
+			self.fullURL = "%s?prefix=%s/%s/work" %(self.baseURL, self.pathURL, workpath)
+			logging.info("URL: %s" % self.fullURL)
 
 		fileMap = { "fdotFile":"full.dot", "fpngFile":"full.png", "adotFile":"arb.dot",
 					"asvgFile":"arb.svg", "pidFile":"rcubic.pid", "logFile":"rcubic.log",
@@ -600,7 +596,7 @@ class Rcubic(object):
 			for df, sf, jn, t in meta:
 				if updateDot:
 					with open(df, "w") as dotFD:
-						dotFD.write(self.rsm.toDot(self.baseURL, len(self.gitDir), t))
+						dotFD.write(self.rsm.toDot(self.config["baseURL"], len(self.gitDir), t))
 					with open(sf, "w") as svgFD:
 						processResult = popenNonblock(["dot", "-Tsvg", df])
 						# Regex fix the coordinate space comma issue (look at fixCoord definition)
@@ -710,15 +706,8 @@ class Rcubic(object):
 					shutil.copytree("%s/%s" % (self.config["basePath"], "work/log"), "%s/%s" % (archiveDir,"log"))
 				logging.info("Copied files to: %s" % (archiveDir))
 
-				archiveURL = "archive/%s" % uid
-				if(len(archiveURL) > 0):
-					archiveURL = archiveURL + '/'
-				if(self.config["basePathWeb"] != ""):
-					bpw = "/" + self.config["basePathWeb"]
-				else:
-					bpw = self.config["basePathWeb"]
-				fullURL = "%s%s/?prefix=%s" %(self.config["baseURL"], bpw, archiveURL)
-				logging.info("Job archive available at: %s" % (fullURL))
+				archiveURL = "%s?prefix=%s/archive/%s" %(self.baseURL, self.pathURL, uid)
+				logging.info("Job archive available at: %s" % (archiveURL))
 		except:
 			logging.error("Something went wrong while trying to copy files to archive: %s" % (str(sys.exc_info())))
 
