@@ -750,13 +750,13 @@ class Rcubic(object):
 		rse = self.rsm.queueJobs() #release script event
 
 		jobs = [gevent.spawn(rsei) for rsei in rse]
-		jobs.extend([gevent.spawn(self.communicator.start,block=False), gevent.spawn(self.processEvents)])
+		jobs.extend([gevent.spawn(self.processEvents)])
 		# Starts non-blocking so we can get port
-		#self.communicator.start(block=False)
-		gevent.joinall(jobs)
+		self.communicator.start(block=False)
 		logging.info("Server started at %s:%s" % (self.communicator.bind, self.communicator.port))
 		self.token = self.communicator.token
 		self.port = self.communicator.port
+		gevent.joinall(jobs)
 		time.sleep(5)
 		self._updateGraph(updateDot=True)
 		self.notification.processQueue()
