@@ -1,5 +1,5 @@
 <?xml version="1.0"?>
-<wgr>
+<rcubic>
 	<config>
 	</config>
 	<release version="mc0.2.7">
@@ -12,4 +12,4 @@
 		<product name="sfs" email="user@example.com"/>
 		<product name="release" email="user@example.com"/>
 	</notification>
-</wgr>
+</rcubic>

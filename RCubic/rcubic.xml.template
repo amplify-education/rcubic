@@ -42,7 +42,6 @@
 
 		<!-- Web Server integration settings -->
 		<option name="baseURL" value="http://localhost"/>
-        <option name="basePathWeb" value="rcubic" />
         <!-- HTTP ROOT -->
         <option name="basePath" value="/srv/http/"/>
 

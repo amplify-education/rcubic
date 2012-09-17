@@ -170,8 +170,7 @@ The main configuration file for rcubic specifies the basic settings such as what
             -->
 
             <!-- Web Server integration settings -->
-            <option name="baseURL" value="http://localhost"/>
-            <option name="basePathWeb" value="rcubic" />
+            <option name="baseURL" value="http://localhost/rcubic"/>
             <!-- HTTP ROOT -->
             <option name="basePath" value="/srv/http/"/>
 
