@@ -679,7 +679,7 @@ class Rcubic(object):
 					self.signalEvent.clear()
 					self._updateGraph()
 					self.notification.processQueue()
-				if self.opts.foreground or self.abortSent:
+				if self.opts.sessionMode or self.abortSent:
 					if self.rsm.isDone():
 						break
 				else:
