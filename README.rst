@@ -51,7 +51,7 @@ __ http://lxml.de/
 __ http://pypi.python.org/pypi/simplejson/
 __ http://pypi.python.org/pypi/ordereddict
 __ http://docs.python-requests.org/en/latest/index.html
-__ http://github.com/minirestsomwherehere
+__ http://github.com/wgen/minirest
 __ http://git-scm.com/
 __ http://www.graphviz.org/
 

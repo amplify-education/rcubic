@@ -1,3 +1,5 @@
+#!/usr/bin/python
+
 # This file is part of RCubic
 #
 #Copyright (c) 2012 Wireless Generation, Inc.
