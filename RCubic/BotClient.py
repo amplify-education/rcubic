@@ -92,7 +92,7 @@ class BotClient(RESTClient):
                     user = user+'@'+server
                 self.restserver.registerCheckIn(user, checkInName, ev)
                 if not room:
-                    self.getResponse("requestUserCheckIn", data = {"users": [user], "checkInName": checkInName, "message": message, "room":room, 'callbackPort' : port, token:self.token}, *args, **kwargs )
+                    self.getResponse("requestUserCheckIn", data = {"users": [user], "checkInName": checkInName, "message": message, "room":room, "callbackPort":port, "token":self.token}, *args, **kwargs )
             if room:
                 self.getResponse("requestUserCheckIn", data= {"users": users, "checkInName": checkInName, "message": message, "room": room , 'callbackPort': port, "token":self.token}, *args, **kwargs)
         tasks = [gevent.spawn(self.waitForEvent, eve) for eve in events]

@@ -38,7 +38,8 @@ parser.add_argument('--lkey', dest='lkey',default=None, help='listen private key
 parser.add_argument('--lcert', dest='lcert', default=None, help='listen certificate', type=str)
 parser.add_argument('--baddr', dest='baddr', default='127.0.0.1', help='bot address', type=str)
 parser.add_argument('--blport', dest='blport', default='8001', help='bot listen port', type=int)
-parser.add_argument('--cacert', dest='cacert', default=None, help='CACert to auth server', type=str)
+parser.add_argument('--nossl', dest='ssl', action='store_const', const=False, default=True, help='Disable SSL.')
+parser.add_argument('--cacert', dest='cacert', default=False, help='CACert to auth server', type=str)
 parser.add_argument('--token', dest='token', default='', help='used to auth with bot server', type=str)
 parser.add_argument('--name', dest='name', required=True, help='unique checkInName for callbacks', type=str)
 parser.add_argument('--message', '-m', dest='message', default=None, help='message to send to the users', type=str)
@@ -51,7 +52,7 @@ args = parser.parse_args()
 
 # Start server and bot client
 server = RCubicServer(bind=args.laddr, port=args.lport, portRange=args.lrange, SSLKey=args.lkey, SSLCert=args.lcert, token=args.token)
-client = BotClient(server=args.baddr, port=args.blport, CACert=args.cacert, token=args.token)
+client = BotClient(server=args.baddr, port=args.blport, ssl=args.ssl, CACert=args.cacert, token=args.token)
 client.registerRESTServer(server)
 # Don't block so that we can execute check in
 server.start(block=False)
