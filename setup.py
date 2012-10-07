@@ -47,6 +47,10 @@ setup(name = 'RCubic',
           ('RCubic/', [ "RCubic/rcubic.xml.template" ]),
           ('RCubic/web/', [ "RCubic/web/index.html" ]),
           ('RCubic/web/archive/', ["RCubic/web/archive/index.html"]),
+          ('RCubic/web/', [
+              "RCubic/web/index.html",
+              "RCubic/web/archive.html"
+              ]),
           ('RCubic/web/css/', [
             "RCubic/web/css/jquery.qtip.min.css",
             "RCubic/web/css/select2.css",

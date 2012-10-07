@@ -650,6 +650,10 @@ class Rcubic(object):
 
 				archiveURL = "%s?prefix=%s/archive/%s" %(self.baseURL, self.pathURL, uid)
 				logging.info("Job archive available at: %s" % (archiveURL))
+				job_log = open("%s/%s" % (self.config["archivePath"], "jobs.txt"), "a")
+				job_log.write("%s,%s,%s,%s\n" % (time.strftime("%m/%d/%y - %H:%M"), self.opts.release, ','.join(self.rsm.groups), uid))
+				job_log.close()
+
 		except:
 			logging.error("Something went wrong while trying to copy files to archive: %s" % (str(sys.exc_info())))
 
