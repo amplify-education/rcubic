@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta http-equiv="content-type" content="text/html; charset=UTF-8">
+  <script type='text/javascript' src='http://code.jquery.com/jquery-1.8.2.js'></script>
+<link href="/css/select2.css" type="text/css" rel="stylesheet" />
+<script type="text/javascript" src="/js/select2.js"></script>
+<style>
+</style>
+<script type="text/javascript">
+var dates = { };
+var versions = { };
+var groups = { };
+var uuids = { };
+
+
+// If key in collection, append item
+// else add array with one item
+function append_item(collection, key, item) {
+    if(!(key in collection)) {
+        collection[key] = { };
+    }
+    collection[key][item] = null;
+};
+
+// Add selection options
+function add_options(id, values) {
+    for(var x in values) {
+        $("#" + id).append('<option value="' + x + '">' + x + '</option>');
+    }
+    $("#" + id).select2();
+    $("#" + id).on("change", function(e) {intersect(); });
+}
+
+function intersect() {
+    // Get selected values
+    var d_selected = $("#date").select2("val");
+    var v_selected = $("#version").select2("val");
+    var g_selected = $("#group").select2("val");
+
+    // Get union uuids of each type
+    var d_uuids = { }; var d_empty = true;
+    var v_uuids = { }; var v_empty = true;
+    var g_uuids = { }; var g_empty = true;
+    for(var x in d_selected) {
+        for(var y in dates[d_selected[x]]) {
+            d_uuids[y] = null;
+            d_empty = false;
+        }
+    }
+    for(var x in v_selected) {
+        for(var y in versions[v_selected[x]]) {
+            v_uuids[y] = null;
+            v_empty = false;
+        }
+    }
+    for(var x in g_selected) {
+        for(var y in groups[g_selected[x]]) {
+            g_uuids[y] = null;
+            g_empty = false;
+        }
+    }
+
+    // Intersect d v and g
+    var results = { };
+    // Loop through a non empty set
+    var any = d_empty ? (v_empty ? g_uuids : v_uuids) : d_uuids;
+    $("#results").empty();
+    var result_str = "<table id='table' width='100%' border='1'><thead><tr><td>Date</td><td>Version</td><td>Groups</td><td>Link</td></tr></thead>";
+    for(var x in any) {
+        if((v_empty || x in v_uuids) && (g_empty || x in g_uuids)) {
+            results[x] = null;
+            result_str = result_str + "<tr><td>" + uuids[x]['date'] + "</td><td>" + uuids[x]['version'] + "</td><td>" + JSON.stringify(uuids[x]['groups']) + "</td><td><a href='/?prefix=/archive/" + x + "' target='_blank'>" + x + "</a></tr>";
+            <!--$("#results").append(JSON.stringify(uuids[x]) + "<br />");-->
+        }
+    }
+    $("#results").append(result_str + "</table>");
+
+}
+
+// Request file
+$.ajax({
+    url: "jobs.txt",
+}).done(function(data) {
+    // Split rows
+    lines = data.split('\n');
+    for(x in lines) {
+        // Split data
+        d = lines[x].split(",");
+        // If has date, version, groups+, uuid
+        if(d.length >= 4) {
+            // UUID is last field
+            uuid = d[d.length-1];
+
+            // Global final lookup
+            uuids[uuid] = {'date': d[0], 'version': d[1], 'groups': []};
+
+            // Add dates -> UUID
+            append_item(dates, d[0].split(" ")[0], uuid);
+
+            // Add verions -> UUID
+            append_item(versions, d[1], uuid);
+
+            // Loop through rest for groups
+            for(var i = 2; i < d.length-1; i++) {
+                append_item(groups, d[i], uuid);
+                uuids[uuid]['groups'].push(d[i]);
+            }
+        }
+    }
+    add_options("date", dates);
+    add_options("version", versions);
+    add_options("group", groups);
+});
+
+</script>
+<style>
+</style>
+</head>
+<body>
+[A or B] AND [C or D] AND [E or F] <br /><br />
+<form>
+    Date:<select id="date" style="width:300px" multiple="multiple"></select>
+    Version:<select id="version" style="width:300px" multiple="multiple"></select>
+    Group:<select id="group" style="width:300px" multiple="multiple"></select>
+</form>
+<br />
+<br />
+<div id="results"></div>
+</body>
+</html>
