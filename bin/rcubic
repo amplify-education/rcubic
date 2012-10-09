@@ -379,8 +379,7 @@ class Rcubic(object):
 			raise ConfigurationError("ERROR: failed to parse config file (%s): %s" %(configFile, error))
 
 		#TODO save config to local var and then copy values after tweaking
-		#TODO narrow /*/ to /rcubic after full rename
-		for element in self.etree.xpath("/*/config/option"):
+		for element in self.etree.xpath("/rcubic/config/option"):
 			try:
 				if element.attrib["name"] == "basePath" and "basePath" in self.config:
 					raise ConfigurationError("ERROR: basePath is being overriden in %s." %(configFile))
@@ -393,7 +392,7 @@ class Rcubic(object):
 				raise ConfigurationError("ERROR: Element on line %i of %s is missing an attribute." %(element.sourceline, element.base))
 
 		# Go through resources limit config
-		for element in self.etree.xpath("/*/resources/option"):
+		for element in self.etree.xpath("/rcubic/resources/option"):
 			try:
 				resource = element.attrib["name"]
 				value = int(element.attrib["value"])
@@ -444,7 +443,7 @@ class Rcubic(object):
 		self._populateAISFilter()
 		toInstallGroups=[]
 
-		for element in self.etree.xpath("/*/release/install"):
+		for element in self.etree.xpath("/rcubic/release/install"):
 			try:
 				version = element.attrib["version"]
 				group = element.attrib["group"]
@@ -501,7 +500,7 @@ class Rcubic(object):
 
 	def _readNotificationConfig(self):
 		count = 0
-		for product in self.etree.xpath("/*/notification/product"):
+		for product in self.etree.xpath("/rcubic/notification/product"):
 			try:
 				self.notification.addProductEmail(product.attrib["name"], product.attrib["email"])
 			except KeyError:
