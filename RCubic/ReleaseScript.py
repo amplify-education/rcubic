@@ -247,6 +247,13 @@ class ReleaseScriptManager(object):
 
 #AKA AIS
 class ReleaseScript(object):
+	colors = {
+		'sdep' : {'undefnode':'gray', 'undefedge':'palegreen', 'node':'lawngreen'},
+		'idep' : {'undefnode':'gray', 'undefedge':'palegreen', 'node':'gold2'},
+		'hdep' : {'undefnode':'red', 'undefedge':'red', 'node':'deepskyblue'}
+	}
+	font = "sans-serif"
+
 	class Phase(dict):
 		all = ("EARLY", "DEFAULT", "LATE", "NONE")
 		EARLY, DEFAULT, LATE, NONE = all
@@ -283,7 +290,7 @@ class ReleaseScript(object):
 		self.hasFailed = False
 		self.manager = manager
 		self.gitHead = ""
-		self.nodeColors = {Status.STARTED:'yellow', Status.SUCCEEDED:'green', Status.FAILED:'red', Status.CANCELLED:'blue', Status.MANUALOVERRIDE:'pink', Status.BLOCKED:'darkorange'}
+		self.nodeColors = {Status.STARTED:'yellow', Status.SUCCEEDED:'lawngreen', Status.FAILED:'red', Status.CANCELLED:'deepskyblue', Status.MANUALOVERRIDE:'pink', Status.BLOCKED:'darkorange'}
 
 		regexName = re.compile("[^/]*$")
 		matchName = regexName.search(script)
@@ -502,11 +509,6 @@ class ReleaseScript(object):
 		return retVal
 
 	def toJSONNode(self, arborescent=False):
-		colors = {
-			'sdep' : {'undefnode':'gray', 'undefedge':'palegreen', 'node':'green'},
-			'idep' : {'undefnode':'gray', 'undefedge':'palegreen', 'node':'gold4'},
-			'hdep' : {'undefnode':'red', 'undefedge':'red', 'node':'blue'}
-		}
 		color = "white"
 		others = [ ]
 		if self.status in self.nodeColors:
@@ -516,12 +518,12 @@ class ReleaseScript(object):
 				if dep in self.gparent:
 					continue
 				if not self.manager.find(dep):
-					others.append([dep, colors[kind]['undefnode'], -1])
+					others.append([dep, self.colors[kind]['undefnode'], -1])
 		return (self.name, color, self.progress, others)
 
 	def toDotNode(self, url=None, basePathTrimLen=0):
 
-		str = "\t\"%s\" [style=\"filled\"" %(self.name)
+		str = "\t\"%s\" [penwidth=3, style=\"filled\", fontname=\"%s\"" %(self.name, self.font)
 		if self.status in self.nodeColors:
 			str += ", fillcolor=\"%s\"" %(self.nodeColors[self.status])
 		else:
@@ -531,7 +533,9 @@ class ReleaseScript(object):
 			#str += ", label=\"%s\\n%d%%\"" %(self.name, self.progress)
 
 		if self.override:
-			str += ", color=\"blue\""
+			str += ", color=\"deepskyblue\""
+		else:
+			str += ", color=\"lavender\""
 
 		if url:
 			if self.manager.rcubic.config["fileMode"]:
@@ -549,20 +553,15 @@ class ReleaseScript(object):
 
 	def toDotEdge(self, arborescent=False):
 		str=""
-		colors = {
-			'sdep' : {'undefnode':'gray', 'undefedge':'palegreen', 'node':'green'},
-			'idep' : {'undefnode':'gray', 'undefedge':'palegreen', 'node':'gold4'},
-			'hdep' : {'undefnode':'red', 'undefedge':'red', 'node':'blue'}
-		}
 		for dep, kind in self.adep.iteritems():
 			if arborescent:
 				if dep in self.gparent:
 					continue
 			if not self.manager.find(dep):
-					str += "\t\"%s\" [color=\"%s\" href=\"http://geocities/bl@ckh0le\"];" %(dep, colors[kind]['undefnode'])
-					str += "\t\"%s\" -> \"%s\" [color=\"%s\"];\n" %(dep, self.name, colors[kind]['undefedge'])
+					str += "\t\"%s\" [penwidth=3, color=\"%s\" href=\"http://geocities/bl@ckh0le\", fontname=\"%s\"];\n" %(dep, self.colors[kind]['undefnode'], self.font)
+					str += "\t\"%s\" -> \"%s\" [color=\"%s\"];\n" %(dep, self.name, self.colors[kind]['undefedge'])
 			else:
-				str += "\t\"%s\" -> \"%s\" [color=\"%s\"];\n" %(dep, self.name, colors[kind]['node'])
+				str += "\t\"%s\" -> \"%s\" [color=\"%s\"];\n" %(dep, self.name, self.colors[kind]['node'])
 		return str
 
 	def validate(self):
