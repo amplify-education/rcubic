@@ -12,6 +12,7 @@ import subprocess
 import fcntl
 import errno
 import sys
+import logging
 
 class TreeDefinedError(RuntimeError):
 	pass
@@ -22,6 +23,8 @@ class JobUndefinedError(RuntimeError):
 class UnknownStateError(RuntimeError):
 	pass
 class DependencyError(RuntimeError):
+	pass
+class XMLError(RuntimeError):
 	pass
 
 
@@ -42,17 +45,31 @@ class ExecJob(Greenlet):
 			STATE_UNDEF:"gray"
 	}
 
-
-	def __init__(self, name="", jobpath="", tree=None, xml=None):
+	def __init__(self, name="", jobpath=None, tree=None, xml=None, execiter=None, mustcomplete=False, subtree=None):
 		Greenlet.__init__(self)
 		if xml is not None:
 			if xml.tag != "execJob":
-				#TODO exception
-				print("Error Tag is unmatched")
-				return
-			name = xml.attrib["name"]
-			jobpath = xml.attrib["jobpath"]
-			uuidi = uuid.UUID(xml.attrib["uuid"])
+				raise XMLError("Expect to find execJob in xml.")
+			try:
+				name = xml.attrib["name"]
+				jobpath = xml.attrib.get("jobpath", None)
+				uuidi = uuid.UUID(xml.attrib["uuid"])
+				mustcomplete = xml.attrib.get("mustcomplete", False) == "True"
+				subtreeuuid = xml.attrib.get("subtreeuuid", None)
+			except KeyError:
+				logging.error("Required xml attribute is not set")
+				raise
+			if jobpath == "":
+				jobpath = None
+			if tree is None and subtreeuuid is not None:
+				raise JobUndefinedError(
+					"The tree the job belongs to needs to be known so we can find subtree"
+				)
+			elif subtreeuuid is not None:
+				subtreeuuid = uuid.UUID(subtreeuuid)
+				subtree = tree.find_subtree(subtreeuuid, None)
+				if subtree is None:
+					raise TreeDefinedError("The referenced subtree cannot be found.")
 		else:
 			uuidi = uuid.uuid4()
 
@@ -60,6 +77,8 @@ class ExecJob(Greenlet):
 		self.uuid = uuidi
 		self._tree = tree
 		self.jobpath = jobpath
+		self.execiter = execiter
+		self.mustcomplete = mustcomplete
 		if self.jobpath == "":
 			self.state = self.STATE_IDLE
 		else:
@@ -67,11 +86,15 @@ class ExecJob(Greenlet):
 		self._progress = -1
 		self.override = False
 		self.event = gevent.event.Event()
-
+		self.subtree = subtree
 
 	def xml(self):
 		""" Generate xml Element object representing of ExecJob """
-		args = {"name":self.name, "uuid":self.uuid.hex, "jobpath":self.jobpath}
+		args = {"name":str(self.name), "uuid":str(self.uuid.hex), "mustcomplete":str(self.mustcomplete)}
+		if self.jobpath is not None:
+			args["jobpath"] = str(self.jobpath)
+		elif self.subtree is not None:
+			args["subtreeuuid"] = str(self.subtree.uuid.hex)
 		eti = et.Element("execJob", args)
 		return eti
 
@@ -136,11 +159,25 @@ class ExecJob(Greenlet):
 
 	def validate(self, prepend=""):
 		errors = []
-		if not os.path.exists(self.jobpath):
-			errors.append("{0}File {1} for needed by job {2} does not exist.".format(prepend, self.jobpath, self.name))
-		else:
-			if not os.access(self.jobpath, os.X_OK):
-				errors.append("{0}File {1} for needed by job {2} is not executable.".format(prepend, self.jobpath, self.name))
+		if (
+				(self.jobpath is None and self.subtree is None)
+				or
+				(self.jobpath is not None and self.subtree is not None)
+			):
+			errors.append("subtree or jobpath must be set")
+
+		if self.jobpath is not None:
+			if not os.path.exists(self.jobpath):
+				errors.append(
+					"{0}File {1} for needed by job {2} does not exist."
+					.format(prepend, self.jobpath, self.name)
+				)
+			else:
+				if not os.access(self.jobpath, os.X_OK):
+					errors.append(
+						"{0}File {1} for needed by job {2} is not executable."
+						.format(prepend, self.jobpath, self.name)
+					)
 		return errors
 
 	def is_done(self):
@@ -156,6 +193,10 @@ class ExecJob(Greenlet):
 		return [ej.event for ej in self.parents()]
 
 	def may_start(self):
+		"""
+		Returns true when job may start. That is all dependencies are fulfilled.
+		"""
+		logging.debug("processing may start for {0}".format(self.name))
 		for dep in self.parent_deps():
 			if dep.state != dep.parent.state:
 				return False
@@ -168,10 +209,14 @@ class ExecJob(Greenlet):
 		return self._waiter.set()
 
 	def parent_eselect(self, timeout=None):
+		"""
+		Create event, tell all parents to set it using rawlink. Wait untill event is set.
+		"""
 		self._waiter = gevent.event.Event()
-		for parent in self.parents():
-			parent.event.rawlink(self._parent_eselect_set)
+		for event in self.parent_events():
+			event.rawlink(self._parent_eselect_set)
 		self._waiter.wait(timeout)
+		gevent.sleep(1)
 		#return ifilter(methodcaller('is_set'), parents)
 
 
@@ -217,8 +262,6 @@ class ExecJob(Greenlet):
 				socket.wait_read(p.stdout.fileno())
 			p.stdout.close()
 
-		#output = ''.join(chunks)
-
 		while True:
 			returncode = p.poll()
 			if returncode is not None:
@@ -228,12 +271,30 @@ class ExecJob(Greenlet):
 
 		return returncode
 
+	def reset(self):
+		""" Prepares jobs to be executed again"""
+		self.event.clear()
+		self.state = self.STATE_IDLE
+
+	def cancel(self):
+		logging.debug("Cancel is invoked on {0}".format(self.name))
+		if self.state == self.STATE_RUNNING:
+			return False
+		if self.state in self.DONE_STATES:
+			return True
+		logging.debug("Canceling {0}".format(self.name))
+		self.state = self.STATE_CANCELLED
+		self.event.set()
+		return True
+
 	def _run(self):
 		if self.is_success():
 			return False
 
+		logging.debug("{0} is idling".format(self.name))
 		while not self.may_start():
 			self.parent_eselect()
+		logging.debug("{0} is starting".format(self.name))
 
 		#seconds = random.randrange(0, 100)
 		#print("{0} started, will run for {1} seconds. ".format(self.name, seconds))
@@ -245,14 +306,17 @@ class ExecJob(Greenlet):
 		arguments.append(self.name)
 		#arguments.append(`rcubic.port`)
 
-		self.status = self.STATE_RUNNING
+		self.state = self.STATE_RUNNING
 		#rcubic.refreshStatus(self)
-		print("starting %s %s" % (self.name, arguments))
-		rcode = self._popen(
-			arguments,
-			cwd=self.tree.cwd,
-		)
-		print("finished %s" % (self.name))
+		logging.debug("starting {0} {1}".format(self.name, arguments))
+		if self.jobpath is not None:
+			rcode = self._popen(
+				arguments,
+				cwd=self.tree.cwd,
+			)
+		elif self.subtree is not None:
+			rcode = self.subtree.run()
+		logging.debug("finished {0}".format(self.name))
 
 		if rcode == 0:
 			self.state = self.STATE_SUCCESSFULL
@@ -263,9 +327,28 @@ class ExecJob(Greenlet):
 			self.event.set()
 			return False
 
+class ExecIter(object):
+	def __init__(self, name=None, args=None):
+		self.jobs = {}
+		if args == None:
+			self.args = []
+		else:
+			self.args = args
+		self.run = 0
+		self.valid = None
+		self.name = name
 
+	def increment(self, inc):
+		if (self.run + inc) >= len(self.args):
+			self.run += inc
+		else:
+			self.run = len(self.args)
+		return self.run
 
-class ExecDependency:
+	def argument(self):
+		return self.args[self.run]
+
+class ExecDependency(Greenlet):
 	NATURES = (0, 1)
 	SUFFICIENT_NATURE, NECESSARY_NATURE = NATURES
 
@@ -279,7 +362,7 @@ class ExecDependency:
 			raise UnknownStateError("Unknown State")
 
 		if nature is None:
-			#We accept None to make it easier to set/change default. 
+			#We accept None to make it easier to set/change default.
 			self.nature = ExecDependency.NECESSARY_NATURE
 		elif nature in ExecDependency.NATURES:
 			self.nature = nature
@@ -287,7 +370,7 @@ class ExecDependency:
 			raise UnknownStateError("Unknown Nature")
 
 	def dot_edge(self):
-		""" Generate dot edge object repersenting dependency """ 
+		""" Generate dot edge object repersenting dependency """
 		edge = pydot.Edge(self.parent.name, self.child.name)
 		if self.nature == ExecDependency.NECESSARY_NATURE:
 			if self.child.state == self.child.STATE_UNDEF:
@@ -308,30 +391,30 @@ class ExecDependency:
 		return eti
 
 
-class ExecTree:
+class ExecTree(object):
 	def __init__(self, xml=None):
 		self.jobs = []
 		self.deps = []
+		self.subtrees = []
 		if xml == None:
 			self.uuid = uuid.uuid4()
 			self.name = ""
 			self.href = ""
 			self.cwd = "/"
 			self.workdir = "/tmp/{0}".format(self.uuid)
+			self.iterator = None
 		else:
 			if xml.tag != "execTree":
-				#TODO exception
-				print("Error Tag is unmatched")
-				return
+				raise XMLError("Expect to find execTree in xml.")
 			if xml.attrib["version"] != "1.0":
-				#TODO exception
-				print("Error version not supported")
-				return
+				raise XMLError("Tree config file version is not supported")
 			self.name = xml.attrib.get("name", "")
 			self.href = xml.attrib.get("href", "")
 			self.uuid = uuid.UUID(xml.attrib["uuid"])
 			self.cwd = xml.attrib.get("cwd", "/")
 			#print("name:{0} href:{1} uuid:{2}".format(self.name, self.href, self.uuid))
+			for xmlsubtree in xml.findall("execTree"):
+				self.subtrees.append(ExecTree(xmlsubtree))
 			for xmljob in xml.findall("execJob"):
 				self.jobs.append(ExecJob(tree=self, xml=xmljob))
 			for xmldep in xml.findall("execDependency"):
@@ -347,15 +430,29 @@ class ExecTree:
 		}
 		eti = et.Element("execTree", args)
 		for job in self.jobs:
+			if job.subtree is not None:
+				eti.append(job.subtree.xml())
+			#else:
+			#	print("job {0} does not have a subtree.".format(job.name))
 			eti.append(job.xml())
 		for dep in self.deps:
 			eti.append(dep.xml())
 		return eti
 
-	def __getitem__(self, key):
+	def __str__(self):
+		return ("Subtree_{0}_{1}".format(self.name, self.uuid))
+
+	def __getitem__(self, key, default=None):
 		for job in self.jobs:
 			if job.name == key:
 				return job
+		return default
+
+	def find_subtree(self, uuid, default=None):
+		for subtree in self.subtrees:
+			if subtree.uuid == uuid:
+				return subtree
+		return default
 
 	def find_jobs(self, needle, default=[]):
 		""" Find all jobs based on their name / uuid """
@@ -365,14 +462,14 @@ class ExecTree:
 		else:
 			return default
 
-	def find_job(self, needle):
+	def find_job(self, needle, default=None):
 		""" Find job based on name or uuid """
 		for job in self.jobs:
 			if job.name == needle:
 				return job
 			elif job.uuid.hex == needle:
 				return job
-		return None
+		return default
 
 	def add_job(self, job):
 		if self.find_job(job.name):
@@ -383,9 +480,7 @@ class ExecTree:
 	def add_dep(self, parent=None, child=None, state=ExecJob.STATE_SUCCESSFULL, nature=None, xml=None):
 		if xml is not None:
 			if xml.tag != "execDependency":
-				#TODO exception
-				print("Error Tag is unmatched")
-				return
+				raise XMLError("Expect to find execDependency in xml.")
 			parent = xml.attrib["parent"]
 			child = xml.attrib["child"]
 			state = int(xml.attrib["state"])
@@ -404,8 +499,9 @@ class ExecTree:
 			if k not in self.jobs:
 				try:
 					self.add_job(k)
+					logging.warning("Implicitly adding job {0} to tree {1} via dependency.".format(k.name, self.name))
 				except TreeDefinedError:
-					raise JobUndefinedError("Job {0} is not part of the tree {1}".format(k, tree))
+					raise JobUndefinedError("Job {0} is not part of the tree: {1}.".format(k.name, self.name))
 
 		dep = ExecDependency(parent, child, state, nature)
 		self.deps.append(dep)
@@ -483,15 +579,35 @@ class ExecTree:
 		parents.remove(job)
 		return True
 
-	def run(self):
-		print("About to spin up jobs")
-		#TODO this class is for testing only!!!!
+	def advance(self):
+		if self.iterator is not None:
+			self.iterator.increment()
+		for job in self.jobs:
+			job.reset()
+
+	def is_done(self):
+		for job in self.jobs:
+			if job.mustcomplete:
+				if not job.is_done():
+					return False
+		return True
+
+	def cancel(self):
+		for job in self.jobs:
+			job.cancel()
+
+	def run(self, blocking=True):
+		logging.debug("About to spin up jobs")
 		for job in self.jobs:
 			job.start()
-		print("Jobs have been spun up. I'm gonna chill")
-		#gevent.sleep(5)
-		print("Chilling is done. Impatiently waiting for jobs to finish")
+		if blocking:
+			logging.debug("Jobs have been spun up. I'm gonna chill")
+			gevent.sleep(1)
+			logging.debug("Chilling is done. Impatiently waiting for jobs to finish")
+			self.join()
+			logging.debug("Normalcy restored.")
+
+	def join(self):
 		for job in self.jobs:
 			job.join()
-		print("Normalcy restored.")
 
