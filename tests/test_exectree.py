@@ -175,6 +175,11 @@ class TestET(unittest.TestCase):
 		"""And that the tree is valid"""
 		self.test_validation()
 
+		with gevent.Timeout(10):
+			self.tree.run()
+
+		self.assertTrue(ltree.is_done())
+		self.assertTrue(self.tree.is_done())
 
 	def test_crosstree_dep(self):
 		""" Detect dependencies between jobs in different trees """
@@ -212,6 +217,37 @@ class TestET(unittest.TestCase):
 		self.assertTrue(job6.is_done())
 		self.assertTrue(self.tree.is_done())
 
+	def _test_treetarator_count_incr(self, foo):
+		self.ljob1_count += 1
+
+	def test_treetarator(self):
+		""" Test ExecTree subtrees with iteration """
+
+		ltree = exectree.ExecTree()
+		ltree.name = "local tree"
+		ljob1 = self._newjob("sal", ltree)
+		ljob2 = self._newjob("sov", ltree)
+		ltree.add_dep(ljob1, ljob2)
+
+		job4 = exectree.ExecJob("sym", subtree=ltree)
+		self.tree.add_job(job4)
+		self.tree.add_dep(self.job3, job4)
+
+
+		arguments = ["qwe", "asd", "zxc"]
+		ltree.iterator = exectree.ExecIter("test", arguments)
+
+		""" Each time ljob1 executes increment counter"""
+		self.ljob1_count = 0
+		ljob1.events[exectree.ExecJob.STATE_SUCCESSFULL].rawlink(self._test_treetarator_count_incr)
+
+		with gevent.Timeout(30):
+			runreturn = self.tree.run()
+
+		self.assertIsNone(runreturn)
+		self.assertTrue(ltree.is_done())
+		self.assertTrue(self.tree.is_done())
+		self.assertTrue(self.ljob1_count == len(arguments))
 
 if  __name__ == '__main__':
 	unittest.main()

@@ -6,8 +6,8 @@ import gevent
 from gevent import (Greenlet, event, socket)
 import os
 import random
-from itertools import ifilter
-from operator import methodcaller
+#from itertools import ifilter
+#from operator import methodcaller
 import subprocess
 import fcntl
 import errno
@@ -26,11 +26,14 @@ class DependencyError(RuntimeError):
 	pass
 class XMLError(RuntimeError):
 	pass
+class IterratorOverrunError(RuntimeError):
+	pass
 
 
-class ExecJob(Greenlet):
-	STATES = (0, 1, 2, 3, 4, 5)
-	STATE_IDLE, STATE_RUNNING, STATE_SUCCESSFULL, STATE_FAILED, STATE_CANCELLED, STATE_UNDEF = STATES
+#class ExecJob(Greenlet):
+class ExecJob(object):
+	STATES = (0, 1, 2, 3, 4, 5, 6)
+	STATE_IDLE, STATE_RUNNING, STATE_SUCCESSFULL, STATE_FAILED, STATE_CANCELLED, STATE_UNDEF, STATE_RESET = STATES
 	DEPENDENCY_STATES = [ STATE_SUCCESSFULL, STATE_FAILED ]
 	DONE_STATES = [ STATE_SUCCESSFULL, STATE_FAILED, STATE_CANCELLED ]
 	SUCCESS_STATES = [ STATE_SUCCESSFULL ]
@@ -46,7 +49,7 @@ class ExecJob(Greenlet):
 	}
 
 	def __init__(self, name="", jobpath=None, tree=None, xml=None, execiter=None, mustcomplete=True, subtree=None):
-		Greenlet.__init__(self)
+		#Greenlet.__init__(self)
 		if xml is not None:
 			if xml.tag != "execJob":
 				raise XMLError("Expect to find execJob in xml.")
@@ -102,6 +105,8 @@ class ExecJob(Greenlet):
 
 	def __str__(self):
 		str="Job:{0} Tree:{1} UUID:{2} path:{3}".format(self.name, self.uuid, self.tree, self.jobpath)
+
+	#TODO: setter for sub tree to ensure only subtrees are iterable
 
 	@property
 	def state(self):
@@ -260,7 +265,8 @@ class ExecJob(Greenlet):
 		""" Prepares jobs to be executed again"""
 		for key in self.events.iterkeys():
 			self.events[key].clear()
-		self.state = self.STATE_IDLE
+		self.state = self.STATE_RESET
+		logging.debug("job {0} has been reset.".format(self.name))
 
 	def cancel(self):
 		logging.debug("Cancel is invoked on {0}".format(self.name))
@@ -271,6 +277,9 @@ class ExecJob(Greenlet):
 		logging.debug("Canceling {0}".format(self.name))
 		self.state = self.STATE_CANCELLED
 		return True
+
+	def start(self):
+		g = Greenlet.spawn(self._run)
 
 	def _run(self):
 		if self.is_success():
@@ -295,7 +304,7 @@ class ExecJob(Greenlet):
 			)
 		elif self.subtree is not None:
 			logging.debug("starting {0} {1}".format(self.name, "subtree"))
-			rcode = self.subtree.run()
+			rcode = self.subtree.iterrun()
 		logging.debug("finished {0}".format(self.name))
 
 		if rcode == 0:
@@ -316,17 +325,28 @@ class ExecIter(object):
 		self.valid = None
 		self.name = name
 
-	def increment(self, inc):
-		if (self.run + inc) >= len(self.args):
-			self.run += inc
+	def is_exhausted(self):
+		if self.run >= len(self.args) - 1:
+			return True
+		return False
+
+	def increment(self, inc=1):
+		if (self.run + inc) >= len(self.args) - 1:
+			self.run = len(self.args) - 1
 		else:
-			self.run = len(self.args)
+			self.run += inc
 		return self.run
 
+	@property
 	def argument(self):
-		return self.args[self.run]
+		if self.run < 1 and len(self.args)  < 1:
+			return ""
+		elif self.run > len(self.args):
+			raise IterratorOverrunError("Iterator has no more elements")
+		else:
+			return self.args[self.run]
 
-class ExecDependency(Greenlet):
+class ExecDependency(object):
 	def __init__(self, parent, child, state=ExecJob.STATE_SUCCESSFULL):
 		self.parent = parent
 		self.child = child
@@ -470,6 +490,13 @@ class ExecTree(object):
 		dep = ExecDependency(parent, child, state)
 		self.deps.append(dep)
 
+	@property
+	def argument(self):
+		if self.iterator is None:
+			return ""
+		else:
+			return self.iterator.argument()
+
 	def dot_graph(self):
 		graph = pydot.Dot(graph_type="graph")
 		for job in self.jobs:
@@ -538,16 +565,10 @@ class ExecTree(object):
 		if job not in visited:
 			visited.append(job)
 		for child in job.children():
-			 if not self.validate_nocycles(child, visited, parents):
+			if not self.validate_nocycles(child, visited, parents):
 				return False
 		parents.remove(job)
 		return True
-
-	def advance(self):
-		if self.iterator is not None:
-			self.iterator.increment()
-		for job in self.jobs:
-			job.reset()
 
 	def _is_done_event(self, instance):
 		logging.debug("Are we done yet?")
@@ -569,18 +590,38 @@ class ExecTree(object):
 			job.cancel()
 
 	def run(self, blocking=True):
-		logging.debug("About to spin up jobs")
+		logging.debug("About to spin up jobs for {0}".format(self.name))
 		for job in self.jobs:
 			for ek, ev in job.events.items():
 				ev.rawlink(self._is_done_event)
 			job.start()
 		if blocking:
-			logging.debug("Jobs have been spun up. I'm gonna chill")
+			logging.debug("Jobs have been spun up for {0}. I'm gonna chill".format(self.name))
 			gevent.sleep(1)
-			logging.debug("Chilling is done. Impatiently waiting for jobs to finish")
+			logging.debug("Chilling is done. Impatiently waiting for jobs of {0} to finish".format(self.name))
 			#self.join()
 			self.done_event.wait()
-			logging.debug("Normalcy restored.")
+			logging.debug("Tree {0} has finished execution.".format(self.name))
+
+	def advance(self):
+		logging.debug("Advancing tree {0}.".format(self.name))
+		self.done_event.clear()
+		if self.iterator is not None:
+			self.iterator.increment()
+		for job in self.jobs:
+			job.reset()
+
+	def iterrun(self):
+		if self.iterator is None:
+			self.run()
+			return None
+		if self.iterator.is_exhausted():
+			return False
+		while True:
+			self.run()
+			if self.iterator.is_exhausted():
+				break
+			self.advance()
 
 	def join(self):
 		for job in self.jobs:
