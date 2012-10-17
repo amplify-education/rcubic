@@ -45,7 +45,7 @@ class ExecJob(Greenlet):
 			STATE_UNDEF:"gray"
 	}
 
-	def __init__(self, name="", jobpath=None, tree=None, xml=None, execiter=None, mustcomplete=False, subtree=None):
+	def __init__(self, name="", jobpath=None, tree=None, xml=None, execiter=None, mustcomplete=True, subtree=None):
 		Greenlet.__init__(self)
 		if xml is not None:
 			if xml.tag != "execJob":
@@ -85,7 +85,9 @@ class ExecJob(Greenlet):
 			self.state = self.STATE_UNDEF
 		self._progress = -1
 		self.override = False
-		self.event = gevent.event.Event()
+		self.events = {}
+		for e in self.DONE_STATES:
+			self.events[e] = gevent.event.Event()
 		self.subtree = subtree
 
 	def xml(self):
@@ -100,6 +102,16 @@ class ExecJob(Greenlet):
 
 	def __str__(self):
 		str="Job:{0} Tree:{1} UUID:{2} path:{3}".format(self.name, self.uuid, self.tree, self.jobpath)
+
+	@property
+	def state(self):
+		return self._state
+
+	@state.setter
+	def state(self, value):
+		self._state = value
+		if self._state in self.DONE_STATES:
+			self.events[self._state].set()
 
 	@property
 	def tree(self):
@@ -183,42 +195,15 @@ class ExecJob(Greenlet):
 	def is_done(self):
 		return self.state in ExecJob.DONE_STATES
 
-	def is_set(self):
-		return self.event.is_set()
-
 	def is_success(self):
 		return self.state in ExecJob.SUCCESS_STATES
 
-	def parent_events(self):
-		return [ej.event for ej in self.parents()]
+	def is_cancelled(self):
+		return self.state == ExecJob.STATE_CANCELLED
 
-	def may_start(self):
-		"""
-		Returns true when job may start. That is all dependencies are fulfilled.
-		"""
-		logging.debug("processing may start for {0}".format(self.name))
+	def _parent_wait(self):
 		for dep in self.parent_deps():
-			if dep.state != dep.parent.state:
-				return False
-			else:
-				if dep.nature == ExecDependency.SUFFICIENT_NATURE:
-					return True
-		return True
-
-	def _parent_eselect_set(self, instance):
-		return self._waiter.set()
-
-	def parent_eselect(self, timeout=None):
-		"""
-		Create event, tell all parents to set it using rawlink. Wait untill event is set.
-		"""
-		self._waiter = gevent.event.Event()
-		for event in self.parent_events():
-			event.rawlink(self._parent_eselect_set)
-		self._waiter.wait(timeout)
-		gevent.sleep(1)
-		#return ifilter(methodcaller('is_set'), parents)
-
+			dep.wait()
 
 	@staticmethod
 	def _popen(args, data='', stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, cwd=None):
@@ -273,7 +258,8 @@ class ExecJob(Greenlet):
 
 	def reset(self):
 		""" Prepares jobs to be executed again"""
-		self.event.clear()
+		for key in self.events.iterkeys():
+			self.events[key].clear()
 		self.state = self.STATE_IDLE
 
 	def cancel(self):
@@ -284,7 +270,6 @@ class ExecJob(Greenlet):
 			return True
 		logging.debug("Canceling {0}".format(self.name))
 		self.state = self.STATE_CANCELLED
-		self.event.set()
 		return True
 
 	def _run(self):
@@ -292,39 +277,32 @@ class ExecJob(Greenlet):
 			return False
 
 		logging.debug("{0} is idling".format(self.name))
-		while not self.may_start():
-			self.parent_eselect()
+		self._parent_wait()
+		if self.state in self.DONE_STATES:
+			return None
 		logging.debug("{0} is starting".format(self.name))
-
-		#seconds = random.randrange(0, 100)
-		#print("{0} started, will run for {1} seconds. ".format(self.name, seconds))
-		#gevent.sleep(seconds)
-		#print("{0} finised.".format(self.name))
-
-		arguments = []
-		arguments.append(self.jobpath)
-		arguments.append(self.name)
-		#arguments.append(`rcubic.port`)
 
 		self.state = self.STATE_RUNNING
 		#rcubic.refreshStatus(self)
-		logging.debug("starting {0} {1}".format(self.name, arguments))
 		if self.jobpath is not None:
+			arguments = []
+			arguments.append(self.jobpath)
+			arguments.append(self.name)
+			logging.debug("starting {0} {1}".format(self.name, arguments))
 			rcode = self._popen(
 				arguments,
 				cwd=self.tree.cwd,
 			)
 		elif self.subtree is not None:
+			logging.debug("starting {0} {1}".format(self.name, "subtree"))
 			rcode = self.subtree.run()
 		logging.debug("finished {0}".format(self.name))
 
 		if rcode == 0:
 			self.state = self.STATE_SUCCESSFULL
-			self.event.set()
 			return True
 		else:
 			self.state = self.STATE_FAILED
-			self.event.set()
 			return False
 
 class ExecIter(object):
@@ -349,10 +327,7 @@ class ExecIter(object):
 		return self.args[self.run]
 
 class ExecDependency(Greenlet):
-	NATURES = (0, 1)
-	SUFFICIENT_NATURE, NECESSARY_NATURE = NATURES
-
-	def __init__(self, parent, child, state=ExecJob.STATE_SUCCESSFULL, nature=None):
+	def __init__(self, parent, child, state=ExecJob.STATE_SUCCESSFULL):
 		self.parent = parent
 		self.child = child
 
@@ -361,32 +336,21 @@ class ExecDependency(Greenlet):
 		else:
 			raise UnknownStateError("Unknown State")
 
-		if nature is None:
-			#We accept None to make it easier to set/change default.
-			self.nature = ExecDependency.NECESSARY_NATURE
-		elif nature in ExecDependency.NATURES:
-			self.nature = nature
-		else:
-			raise UnknownStateError("Unknown Nature")
-
 	def dot_edge(self):
 		""" Generate dot edge object repersenting dependency """
 		edge = pydot.Edge(self.parent.name, self.child.name)
-		if self.nature == ExecDependency.NECESSARY_NATURE:
-			if self.child.state == self.child.STATE_UNDEF:
-				edge.set("color", "green")
-			else:
-				edge.set("color", "blue")
+		if self.child.state == self.child.STATE_UNDEF:
+			edge.set("color", "palegreen")
 		else:
-			if self.child.state == self.child.STATE_UNDEF:
-				edge.set("color", "palegreen")
-			else:
-				edge.set("color", "paleblue")
+			edge.set("color", "paleblue")
 		return edge
+
+	def wait(self):
+		self.parent.events[self.state].wait()
 
 	def xml(self):
 		""" Generate xml Element object representing the depedency """
-		args = {"parent":self.parent.uuid.hex, "child":self.child.uuid.hex, "state":`self.state`, "nature":`self.nature`}
+		args = {"parent":self.parent.uuid.hex, "child":self.child.uuid.hex, "state":`self.state`}
 		eti = et.Element("execDependency", args)
 		return eti
 
@@ -396,6 +360,7 @@ class ExecTree(object):
 		self.jobs = []
 		self.deps = []
 		self.subtrees = []
+		self.done_event = gevent.event.Event()
 		if xml == None:
 			self.uuid = uuid.uuid4()
 			self.name = ""
@@ -477,14 +442,13 @@ class ExecTree(object):
 		job.tree = self
 		self.jobs.append(job)
 
-	def add_dep(self, parent=None, child=None, state=ExecJob.STATE_SUCCESSFULL, nature=None, xml=None):
+	def add_dep(self, parent=None, child=None, state=ExecJob.STATE_SUCCESSFULL, xml=None):
 		if xml is not None:
 			if xml.tag != "execDependency":
 				raise XMLError("Expect to find execDependency in xml.")
 			parent = xml.attrib["parent"]
 			child = xml.attrib["child"]
 			state = int(xml.attrib["state"])
-			nature = int(xml.attrib["nature"])
 		#Ensure parent and child are ExecJobs
 		if not isinstance(parent, ExecJob):
 			parent = self.find_job(parent)
@@ -503,7 +467,7 @@ class ExecTree(object):
 				except TreeDefinedError:
 					raise JobUndefinedError("Job {0} is not part of the tree: {1}.".format(k.name, self.name))
 
-		dep = ExecDependency(parent, child, state, nature)
+		dep = ExecDependency(parent, child, state)
 		self.deps.append(dep)
 
 	def dot_graph(self):
@@ -585,11 +549,19 @@ class ExecTree(object):
 		for job in self.jobs:
 			job.reset()
 
+	def _is_done_event(self, instance):
+		logging.debug("Are we done yet?")
+		self.is_done()
+
 	def is_done(self):
 		for job in self.jobs:
 			if job.mustcomplete:
 				if not job.is_done():
+					logging.debug("{0} is not done".format(job.name))
 					return False
+		logging.debug("Yes, we are done.")
+		self.done_event.set()
+		self.cancel()
 		return True
 
 	def cancel(self):
@@ -599,12 +571,15 @@ class ExecTree(object):
 	def run(self, blocking=True):
 		logging.debug("About to spin up jobs")
 		for job in self.jobs:
+			for ek, ev in job.events.items():
+				ev.rawlink(self._is_done_event)
 			job.start()
 		if blocking:
 			logging.debug("Jobs have been spun up. I'm gonna chill")
 			gevent.sleep(1)
 			logging.debug("Chilling is done. Impatiently waiting for jobs to finish")
-			self.join()
+			#self.join()
+			self.done_event.wait()
 			logging.debug("Normalcy restored.")
 
 	def join(self):

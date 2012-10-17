@@ -12,6 +12,7 @@ import stat
 import random
 import time
 import gevent
+import logging
 
 #class FooBar(RuntimeError):
 #	pass
@@ -136,8 +137,8 @@ class TestET(unittest.TestCase):
 		xmltree2 = tree2.xml()
 		xmlstr2 = etree.tostring(xmltree2)
 
-		print("tree1:\n {0}".format(etree.tostring(xmltree1, pretty_print=True)))
-		print("tree2:\n {0}".format(etree.tostring(xmltree2, pretty_print=True)))
+		#print("tree1:\n {0}".format(etree.tostring(xmltree1, pretty_print=True)))
+		#print("tree2:\n {0}".format(etree.tostring(xmltree2, pretty_print=True)))
 		self.assertEqual(xmlstr1, xmlstr2)
 
 	def test_execJob_nofile(self):
@@ -184,34 +185,30 @@ class TestET(unittest.TestCase):
 
 	def test_execution(self):
 		""" Run tree and check all jobs finish """
-		self.tree.run()
+		with gevent.Timeout(10):
+			self.tree.run()
 		self.assertTrue(self.tree.is_done())
 
 	def test_incomplete_tree(self):
+		""" Run tree with failed and sans mustcomplete jobs """
 		job4 = self._newjob("war", self.tree, exitcode=1, maxsleep=0)
 		job4.mustcomplete = False
 
 		job5 = self._newjob("wex", self.tree, maxsleep=0)
-		job4.mustcomplete = False
+		job5.mustcomplete = False
 
 		job6 = self._newjob("wop", self.tree, maxsleep=0)
-		#job7 = self._newjob("wum", self.tree)
 		self.tree.add_dep(self.job1, job4)
 		self.tree.add_dep(job4, job5)
 		self.tree.add_dep(job4, job6, state=exectree.ExecJob.STATE_FAILED)
 
-
-		stime = time.time()
 		with gevent.Timeout(10):
-			self.tree.run(blocking=True)
-		etime = time.time()
-		if (etime - stime) >= 10:
-			self.tree.cancel()
-		#	raise self.failureException('Tree execution did not finish in prescribed time.')
+			self.tree.run()
 
-
-		self.assertFalse(job4.is_done())
-		self.assertFalse(job5.is_done())
+		self.assertTrue(job4.is_done())
+		self.assertFalse(job4.is_success())
+		self.assertTrue(job5.is_done())
+		self.assertTrue(job5.is_cancelled())
 		self.assertTrue(job6.is_done())
 		self.assertTrue(self.tree.is_done())
 
