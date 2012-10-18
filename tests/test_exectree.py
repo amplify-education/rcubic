@@ -3,7 +3,6 @@
 from exectree import exectree
 import unittest
 import pydot
-#import xml.etree.ElemeddntTree as elemtree
 from lxml import etree
 import shutil
 import os
@@ -20,6 +19,8 @@ import logging
 class TestET(unittest.TestCase):
 	def setUp(self):
 		self.workdir = tempfile.mkdtemp(prefix="rct")
+		self.my_arg_str_print = "echo \"MYARGS_WERE: {0}\"\n"
+		self.my_arg_str_match = "MYARGS_WERE: {0}"
 
 		self.tree = exectree.ExecTree()
 		self.tree.name = "Base Tree"
@@ -43,6 +44,7 @@ class TestET(unittest.TestCase):
 		if vfile:
 			fd, path = tempfile.mkstemp(prefix=name, dir=self.workdir)
 			os.write(fd, "#!/bin/bash\n")
+			os.write(fd, self.my_arg_str_print.format("$2"))
 			os.write(fd, "echo \"hello my name is {0}\"\n".format(name))
 			if maxsleep > 0:
 				os.write(fd, "sleep \"{0}\"\n".format(random.randrange(0, maxsleep)))
@@ -141,7 +143,7 @@ class TestET(unittest.TestCase):
 		#print("tree2:\n {0}".format(etree.tostring(xmltree2, pretty_print=True)))
 		self.assertEqual(xmlstr1, xmlstr2)
 
-	def test_execJob_nofile(self):
+	def test_execjob_nofile(self):
 		""" Validates error on no job file"""
 		self.assertEqual(self.tree.validate(), [])
 		job4 = self._newjob("yut", self.tree, vfile=False)
@@ -149,7 +151,7 @@ class TestET(unittest.TestCase):
 		self.assertNotEqual(self.tree.validate(), [])
 
 
-	def test_execJob_noexec(self):
+	def test_execjob_noexec(self):
 		""" Validates error on unexecutable job file"""
 		self.assertEqual(self.tree.validate(), [])
 		job4 = self._newjob("fet", self.tree, vexec=False)
@@ -169,10 +171,22 @@ class TestET(unittest.TestCase):
 		self.tree.add_job(job4)
 		self.tree.add_dep(self.job3, job4)
 
-		"""Ensure xml export import works"""
+		#Ensure xml export import works
 		self.test_xml()
 
-		"""And that the tree is valid"""
+
+		#Lets break subtree in several differnt ways to ensure it fails validation
+		job4.subtree = None
+		self.assertNotEqual(self.tree.validate(), [])
+
+		job4.jobpath = "lsadadd"
+		self.assertNotEqual(self.tree.validate(), [])
+
+		job4.subtree = ltree
+		self.assertNotEqual(self.tree.validate(), [])
+		job4.jobpath = None
+
+		#And that the tree is valid
 		self.test_validation()
 
 		with gevent.Timeout(10):
@@ -193,6 +207,7 @@ class TestET(unittest.TestCase):
 		with gevent.Timeout(10):
 			self.tree.run()
 		self.assertTrue(self.tree.is_done())
+
 
 	def test_incomplete_tree(self):
 		""" Run tree with failed and sans mustcomplete jobs """
@@ -226,6 +241,9 @@ class TestET(unittest.TestCase):
 		ltree = exectree.ExecTree()
 		ltree.name = "local tree"
 		ljob1 = self._newjob("sal", ltree)
+		ljob1_file_fd, ljob1_file_path = tempfile.mkstemp(prefix="{0}_inst".format(ljob1.name), dir=self.workdir)
+		os.fdopen(ljob1_file_fd).close
+		ljob1.logfile = ljob1_file_path
 		ljob2 = self._newjob("sov", ltree)
 		ltree.add_dep(ljob1, ljob2)
 
@@ -233,16 +251,24 @@ class TestET(unittest.TestCase):
 		self.tree.add_job(job4)
 		self.tree.add_dep(self.job3, job4)
 
-
 		arguments = ["qwe", "asd", "zxc"]
 		ltree.iterator = exectree.ExecIter("test", arguments)
 
-		""" Each time ljob1 executes increment counter"""
+		#Each time ljob1 executes increment counter
 		self.ljob1_count = 0
 		ljob1.events[exectree.ExecJob.STATE_SUCCESSFULL].rawlink(self._test_treetarator_count_incr)
 
 		with gevent.Timeout(30):
 			runreturn = self.tree.run()
+
+		#Confirm that we see all 3 arguments
+		ljob1_file_fd = open(ljob1_file_path)
+		text = ljob1_file_fd.read()
+		ljob1_file_fd.close()
+		last = 0
+		for arg in arguments:
+			last = text.find(self.my_arg_str_match.format(arg), last)
+			self.assertTrue(last >= 0)
 
 		self.assertIsNone(runreturn)
 		self.assertTrue(ltree.is_done())

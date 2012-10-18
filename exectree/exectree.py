@@ -48,7 +48,7 @@ class ExecJob(object):
 			STATE_UNDEF:"gray"
 	}
 
-	def __init__(self, name="", jobpath=None, tree=None, xml=None, execiter=None, mustcomplete=True, subtree=None):
+	def __init__(self, name="", jobpath=None, tree=None, logfile=None, xml=None, execiter=None, mustcomplete=True, subtree=None):
 		#Greenlet.__init__(self)
 		if xml is not None:
 			if xml.tag != "execJob":
@@ -59,9 +59,12 @@ class ExecJob(object):
 				uuidi = uuid.UUID(xml.attrib["uuid"])
 				mustcomplete = xml.attrib.get("mustcomplete", False) == "True"
 				subtreeuuid = xml.attrib.get("subtreeuuid", None)
+				logfile = xml.attrib.get("logfile", None)
 			except KeyError:
 				logging.error("Required xml attribute is not set")
 				raise
+			if logfile == "":
+				logfile = None
 			if jobpath == "":
 				jobpath = None
 			if tree is None and subtreeuuid is not None:
@@ -82,6 +85,7 @@ class ExecJob(object):
 		self.jobpath = jobpath
 		self.execiter = execiter
 		self.mustcomplete = mustcomplete
+		self.logfile = logfile
 		if self.jobpath == "":
 			self.state = self.STATE_IDLE
 		else:
@@ -100,6 +104,10 @@ class ExecJob(object):
 			args["jobpath"] = str(self.jobpath)
 		elif self.subtree is not None:
 			args["subtreeuuid"] = str(self.subtree.uuid.hex)
+		if self.logfile is None:
+			args["logfile"] = ""
+		else:
+			args["logfile"] = self.logfile
 		eti = et.Element("execJob", args)
 		return eti
 
@@ -176,14 +184,9 @@ class ExecJob(object):
 
 	def validate(self, prepend=""):
 		errors = []
-		if (
-				(self.jobpath is None and self.subtree is None)
-				or
-				(self.jobpath is not None and self.subtree is not None)
-			):
-			errors.append("subtree or jobpath must be set")
-
-		if self.jobpath is not None:
+		if self.jobpath is not None and self.subtree is not None:
+			errors.append("subtree and jobpath of {0} are set. Only one can be set.")
+		elif self.jobpath is not None:
 			if not os.path.exists(self.jobpath):
 				errors.append(
 					"{0}File {1} for needed by job {2} does not exist."
@@ -195,6 +198,11 @@ class ExecJob(object):
 						"{0}File {1} for needed by job {2} is not executable."
 						.format(prepend, self.jobpath, self.name)
 					)
+		elif self.subtree is not None:
+			errors.extend(self.subtree.validate())
+		else:
+			errors.append("subtree or jobpath of {0} must be set.")
+
 		return errors
 
 	def is_done(self):
@@ -215,7 +223,7 @@ class ExecJob(object):
 		"""Communicate with the process non-blockingly.
 		http://code.google.com/p/gevent/source/browse/examples/processes.py?r=23469225e58196aeb89393ede697e6d11d88844b
 
-		This is to be obsoleted with gevent.spaw()
+		This is to be obsoleted with gevent subprocess
 		"""
 		p = subprocess.Popen(args, stdin=stdin, stdout=stdout, stderr=stderr, cwd=cwd)
 		real_stdin = p.stdin if stdin == subprocess.PIPE else stdin
@@ -297,11 +305,21 @@ class ExecJob(object):
 			arguments = []
 			arguments.append(self.jobpath)
 			arguments.append(self.name)
+			arguments.append(self.tree.argument())
 			logging.debug("starting {0} {1}".format(self.name, arguments))
-			rcode = self._popen(
-				arguments,
-				cwd=self.tree.cwd,
-			)
+			if self.logfile is not None:
+				with open(self.logfile, 'a') as fd:
+					rcode = self._popen(
+						arguments,
+						cwd=self.tree.cwd,
+						stdout=fd,
+						stderr=fd
+					)
+			else:
+				rcode = self._popen(
+					arguments,
+					cwd=self.tree.cwd
+				)
 		elif self.subtree is not None:
 			logging.debug("starting {0} {1}".format(self.name, "subtree"))
 			rcode = self.subtree.iterrun()
@@ -490,12 +508,12 @@ class ExecTree(object):
 		dep = ExecDependency(parent, child, state)
 		self.deps.append(dep)
 
-	@property
 	def argument(self):
 		if self.iterator is None:
 			return ""
 		else:
-			return self.iterator.argument()
+			logging.debug("iterator: {0} argument {1}".format(type(self.iterator), type(self.iterator.argument)))
+			return self.iterator.argument
 
 	def dot_graph(self):
 		graph = pydot.Dot(graph_type="graph")
@@ -530,9 +548,9 @@ class ExecTree(object):
 		stems = self.stems()
 
 		if len(stems) == 0:
-			errors.append("Tree has 0 stems, must be empty.".format(stems))
+			errors.append("Tree {0} has 0 stems, must be empty.".format(self.name, stems))
 		elif len(stems) > 1:
-			errors.append("Tree has multiple stems ({0}).".format(stems))
+			errors.append("Tree {0} has multiple stems ({1}).".format(self.name, stems))
 
 		for stem in stems:
 			visited = []
@@ -540,12 +558,12 @@ class ExecTree(object):
 			#do we have cycles?
 			cycles = not self.validate_nocycles(stem, visited)
 			if cycles:
-				errors.append("Tree has cycles.")
+				errors.append("Tree {0} has cycles.".format(self.name))
 
 			#ensure that all jobs are connected
 			for job in self.jobs:
 				if job not in visited:
-					errors.append("Not all jobs are connected.")
+					errors.append("Not all jobs are connected within {0}.".format(self.name))
 					break
 
 			for job in self.jobs:
