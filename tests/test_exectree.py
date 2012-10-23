@@ -30,7 +30,7 @@ class TestET(unittest.TestCase):
 		self.tree.add_dep(self.job1, self.job2)
 		self.tree.add_dep(self.job1, self.job3)
 
-	def teardDown(self):
+	def tearDown(self):
 		shutil.rmtree(self.workdir, False)
 
 	def _newjob(self, name, tree=None, vexec=True, vfile=True, exitcode=0, maxsleep=3):
@@ -61,14 +61,20 @@ class TestET(unittest.TestCase):
 			tree.add_job(job)
 		return job
 
-	def test_graph(self):
+	def test_graph(self, tree=None, target=None):
 		""" Generate and render graph """
-		graph = self.tree.dot_graph()
+		if tree == None:
+			tree = self.tree
+		graph = tree.dot_graph()
 		#self.assertIs(graph, Graph)
 		self.assertTrue(isinstance(graph, pydot.Graph))
 
 		#TODO cleanup and validate the file somehow
-		graph.write_png("/tmp/et.png")
+		if target == None:
+			target = "{0}/et.png".format(self.workdir)
+		graph.write_png(target)
+
+		logging.debug(graph.to_string())
 
 
 	def test_multistem(self):
@@ -251,6 +257,9 @@ class TestET(unittest.TestCase):
 		self.tree.add_job(job4)
 		self.tree.add_dep(self.job3, job4)
 
+		job5 = self._newjob("soi", self.tree)
+		self.tree.add_dep(job4, job5)
+
 		arguments = ["qwe", "asd", "zxc"]
 		ltree.iterator = exectree.ExecIter("test", arguments)
 
@@ -273,7 +282,10 @@ class TestET(unittest.TestCase):
 		self.assertIsNone(runreturn)
 		self.assertTrue(ltree.is_done())
 		self.assertTrue(self.tree.is_done())
+		logging.debug("{0} == {1}".format(self.ljob1_count, len(arguments)))
 		self.assertTrue(self.ljob1_count == len(arguments))
+		self.test_graph(target="{0}/cyt.png".format(self.workdir))
+
 
 if  __name__ == '__main__':
 	unittest.main()

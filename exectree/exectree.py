@@ -146,8 +146,7 @@ class ExecJob(object):
 		if value >= 0 and value <= 100:
 			self._progress = value
 
-	def dot_node(self):
-		""" Generate dot node object repersenting ExecJob """
+	def _dot_node(self):
 		if self.progress >= 0:
 			label = "{0}\n{1}".format(self.name, self.progress)
 		else:
@@ -161,6 +160,29 @@ class ExecJob(object):
 			node.set("labelhref", 'foo')
 			node.set("href", "{0}{1}".format(self.tree.href,self.name))
 		return node
+
+	def _dot_tree(self):
+		subg = pydot.Subgraph(
+				self.subtree.cluster_name,
+				color = "blue",
+			)
+		if self.subtree.iterator is None:
+			subg.set_label(self.name)
+		else:
+			subg.set_label("{0} {1}/{2}".format(self.name, self.subtree.iterator.run, self.subtree.iterator.len()))
+		logging.debug(subg.to_string())
+		self.subtree.dot_graph(subg)
+		return subg
+
+	def dot(self, graph):
+		""" Generate dot object representing ExecJob """
+		if self.jobpath is not None:
+			rep = self._dot_node()
+			graph.add_node(rep)
+		elif self.subtree is not None:
+			rep = self._dot_tree()
+			graph.add_subgraph(rep)
+			graph.set_compound("True")
 
 	def parent_deps(self):
 		deps = []
@@ -323,7 +345,10 @@ class ExecJob(object):
 		elif self.subtree is not None:
 			logging.debug("starting {0} {1}".format(self.name, "subtree"))
 			rcode = self.subtree.iterrun()
-		logging.debug("finished {0}".format(self.name))
+			#TODO: compute rcode
+			logging.warning("Sub tree is not checked for success before proceeding")
+			rcode = 0
+		logging.debug("finished {0} status {1}".format(self.name, rcode))
 
 		if rcode == 0:
 			self.state = self.STATE_SUCCESSFULL
@@ -334,35 +359,37 @@ class ExecJob(object):
 
 class ExecIter(object):
 	def __init__(self, name=None, args=None):
-		self.jobs = {}
 		if args == None:
 			self.args = []
 		else:
 			self.args = args
-		self.run = 0
+		self.run = 1
 		self.valid = None
 		self.name = name
 
 	def is_exhausted(self):
-		if self.run >= len(self.args) - 1:
+		if self.run >= len(self.args):
 			return True
 		return False
 
+	def len(self):
+		return len(self.args)
+
 	def increment(self, inc=1):
-		if (self.run + inc) >= len(self.args) - 1:
-			self.run = len(self.args) - 1
+		if (self.run + inc) >= len(self.args):
+			self.run = len(self.args)
 		else:
 			self.run += inc
 		return self.run
 
 	@property
 	def argument(self):
-		if self.run < 1 and len(self.args)  < 1:
+		if self.run <= 1 and len(self.args)  < 1:
 			return ""
 		elif self.run > len(self.args):
 			raise IterratorOverrunError("Iterator has no more elements")
 		else:
-			return self.args[self.run]
+			return self.args[self.run-1]
 
 class ExecDependency(object):
 	def __init__(self, parent, child, state=ExecJob.STATE_SUCCESSFULL):
@@ -374,14 +401,39 @@ class ExecDependency(object):
 		else:
 			raise UnknownStateError("Unknown State")
 
-	def dot_edge(self):
-		""" Generate dot edge object repersenting dependency """
-		edge = pydot.Edge(self.parent.name, self.child.name)
+	def _dot_add(self, parent_target, child_target, graph):
+		edge = pydot.Edge(parent_target, child_target)
 		if self.child.state == self.child.STATE_UNDEF:
 			edge.set("color", "palegreen")
 		else:
 			edge.set("color", "paleblue")
+		if parent_target is None:
+			parent_target = "None"
+		if child_target is None:
+			child_target = "None"
+		logging.debug("dep: {0} -> {1}".format(parent_target, child_target))
+		graph.add_edge(edge)
 		return edge
+
+	def dot(self, graph):
+		""" Generate dot edge object repersenting dependency """
+
+		if self.parent.subtree is not None and self.child.subtree is not None:
+			#This is a bit tricky we need to loop 2x but the real problems is that it will look UGLY
+			raise NotImplementedError("Dependency between 2 subtrees is not implemented")
+
+		parent_target = self.parent.name
+		child_target = self.child.name
+		if self.parent.subtree is not None:
+			for leaf in self.parent.subtree.leaves():
+				e = self._dot_add(leaf.name, child_target, graph)
+				e.set_ltail(self.parent.subtree.cluster_name)
+		elif self.child.subtree is not None:
+			for stem in self.child.subtree.stems():
+				e = self._dot_add(parent_target, stem.name, graph)
+				e.set_lhead(self.child.subtree.cluster_name)
+		else:
+			self._dot_add(parent_target, child_target, graph)
 
 	def wait(self):
 		self.parent.events[self.state].wait()
@@ -422,6 +474,12 @@ class ExecTree(object):
 				self.jobs.append(ExecJob(tree=self, xml=xmljob))
 			for xmldep in xml.findall("execDependency"):
 				self.add_dep(xml=xmldep)
+
+	@property
+	def cluster_name(self):
+		#pydot does not properly handle space in subtree
+		name = self.name.replace(" ", "_")
+		return "cluster_{0}".format(name)
 
 	def xml(self):
 		args = {
@@ -512,15 +570,15 @@ class ExecTree(object):
 		if self.iterator is None:
 			return ""
 		else:
-			logging.debug("iterator: {0} argument {1}".format(type(self.iterator), type(self.iterator.argument)))
 			return self.iterator.argument
 
-	def dot_graph(self):
-		graph = pydot.Dot(graph_type="graph")
+	def dot_graph(self, graph = None):
+		if graph is None:
+			graph = pydot.Dot(graph_type="digraph")
 		for job in self.jobs:
-			graph.add_node(job.dot_node())
+			job.dot(graph)
 		for dep in self.deps:
-			graph.add_edge(dep.dot_edge())
+			dep.dot(graph)
 		return graph
 
 	def stems(self):
@@ -542,6 +600,21 @@ class ExecTree(object):
 				#print("appending")
 				stems.append(job)
 		return stems
+
+	def leaves(self):
+		"""
+		Finds and returns all the leaf jobs of a tree
+		"""
+		leaves = []
+		for job in self.jobs:
+			leaf = True
+			for dep in self.deps:
+				if job == dep.parent:
+					leaf = False
+					break
+			if leaf:
+				leaves.append(job)
+		return leaves
 
 	def validate(self):
 		errors = []
