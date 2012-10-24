@@ -69,7 +69,7 @@ class TestET(unittest.TestCase):
 		#self.assertIs(graph, Graph)
 		self.assertTrue(isinstance(graph, pydot.Graph))
 
-		#TODO cleanup and validate the file somehow
+		#TODO validate the file somehow
 		if target == None:
 			target = "{0}/et.png".format(self.workdir)
 		graph.write_png(target)
@@ -163,6 +163,16 @@ class TestET(unittest.TestCase):
 		job4 = self._newjob("fet", self.tree, vexec=False)
 		self.tree.add_dep(self.job3, job4)
 		self.assertNotEqual(self.tree.validate(), [])
+
+	def test_undef_job(self):
+		"""Add an undefined job to exectree"""
+		job4 = self._newjob("jum", self.tree, vexec=False)
+		job4.jobpath = job4.UNDEF_JOB
+		self.tree.add_dep(self.job3, job4)
+
+		self.test_validation()
+		self.test_execution()
+		self.test_graph()
 
 
 	def test_subtree(self):

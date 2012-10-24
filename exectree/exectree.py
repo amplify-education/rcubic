@@ -18,6 +18,8 @@ class TreeDefinedError(RuntimeError):
 	pass
 class JobDefinedError(RuntimeError):
 	pass
+class JobError(RuntimeError):
+	pass
 class JobUndefinedError(RuntimeError):
 	pass
 class UnknownStateError(RuntimeError):
@@ -35,9 +37,11 @@ class ExecJob(object):
 	STATES = (0, 1, 2, 3, 4, 5, 6)
 	STATE_IDLE, STATE_RUNNING, STATE_SUCCESSFULL, STATE_FAILED, STATE_CANCELLED, STATE_UNDEF, STATE_RESET = STATES
 	DEPENDENCY_STATES = [ STATE_SUCCESSFULL, STATE_FAILED ]
-	DONE_STATES = [ STATE_SUCCESSFULL, STATE_FAILED, STATE_CANCELLED ]
-	SUCCESS_STATES = [ STATE_SUCCESSFULL ]
+	DONE_STATES = [ STATE_SUCCESSFULL, STATE_FAILED, STATE_CANCELLED, STATE_UNDEF ]
+	SUCCESS_STATES = [ STATE_SUCCESSFULL, STATE_UNDEF ]
 	ERROR_STATES = [ STATE_SUCCESSFULL, STATE_CANCELLED ]
+	PRESTART_STATES = [ STATE_IDLE, STATE_UNDEF ]
+	UNDEF_JOB = "-"
 
 	STATE_COLORS = {
 			STATE_IDLE:"white",
@@ -82,20 +86,17 @@ class ExecJob(object):
 		self.name = name
 		self.uuid = uuidi
 		self._tree = tree
+		self.state = self.STATE_IDLE
+		self.subtree = subtree
 		self.jobpath = jobpath
 		self.execiter = execiter
 		self.mustcomplete = mustcomplete
 		self.logfile = logfile
-		if self.jobpath == "":
-			self.state = self.STATE_IDLE
-		else:
-			self.state = self.STATE_UNDEF
 		self._progress = -1
 		self.override = False
 		self.events = {}
 		for e in self.DONE_STATES:
 			self.events[e] = gevent.event.Event()
-		self.subtree = subtree
 
 	def xml(self):
 		""" Generate xml Element object representing of ExecJob """
@@ -115,6 +116,21 @@ class ExecJob(object):
 		str="Job:{0} Tree:{1} UUID:{2} path:{3}".format(self.name, self.uuid, self.tree, self.jobpath)
 
 	#TODO: setter for sub tree to ensure only subtrees are iterable
+
+	@property
+	def jobpath(self):
+		return self._jobpath
+
+	@jobpath.setter
+	def jobpath(self, value):
+		if self.subtree is not None and value is not None:
+			raise JobError("jobpath cannot be used if subtree is set")
+		if self.state in self.PRESTART_STATES:
+			self._jobpath = value
+			if value == self.UNDEF_JOB and self.state == self.STATE_IDLE:
+				self.state = self.STATE_UNDEF
+		else:
+			raise JobError("jobpath cannot be modified after job has been started")
 
 	@property
 	def state(self):
@@ -209,7 +225,10 @@ class ExecJob(object):
 		if self.jobpath is not None and self.subtree is not None:
 			errors.append("subtree and jobpath of {0} are set. Only one can be set.")
 		elif self.jobpath is not None:
-			if not os.path.exists(self.jobpath):
+			if self.jobpath == self.UNDEF_JOB:
+				#We allow existance of no-op jobs
+				pass
+			elif not os.path.exists(self.jobpath):
 				errors.append(
 					"{0}File {1} for needed by job {2} does not exist."
 					.format(prepend, self.jobpath, self.name)
@@ -315,7 +334,7 @@ class ExecJob(object):
 		if self.is_success():
 			return False
 
-		logging.debug("{0} is idling".format(self.name))
+		logging.debug("{0} is idling ({1})".format(self.name, self.state))
 		self._parent_wait()
 		if self.state in self.DONE_STATES:
 			return None
