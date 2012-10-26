@@ -83,6 +83,9 @@ class ExecJob(object):
 		else:
 			uuidi = uuid.uuid4()
 
+		self.events = {}
+		for e in self.DONE_STATES:
+			self.events[e] = gevent.event.Event()
 		self.name = name
 		self.uuid = uuidi
 		self._tree = tree
@@ -94,9 +97,6 @@ class ExecJob(object):
 		self.logfile = logfile
 		self._progress = -1
 		self.override = False
-		self.events = {}
-		for e in self.DONE_STATES:
-			self.events[e] = gevent.event.Event()
 
 	def xml(self):
 		""" Generate xml Element object representing of ExecJob """
@@ -173,8 +173,8 @@ class ExecJob(object):
 			fillcolor = self.STATE_COLORS[self.state]
 			)
 		if self.tree.href:
-			node.set("labelhref", 'foo')
-			node.set("href", "{0}{1}".format(self.tree.href,self.name))
+			node.set_labelhref('foo')
+			node.set_href("{0}{1}".format(self.tree.href,self.name))
 		return node
 
 	def _dot_tree(self):
@@ -414,6 +414,7 @@ class ExecDependency(object):
 	def __init__(self, parent, child, state=ExecJob.STATE_SUCCESSFULL):
 		self.parent = parent
 		self.child = child
+		self.color = {"undefined":"palegreen", "defined":"deepskyblue"}
 
 		if state in ExecJob.STATES:
 			self.state = state
@@ -422,10 +423,10 @@ class ExecDependency(object):
 
 	def _dot_add(self, parent_target, child_target, graph):
 		edge = pydot.Edge(parent_target, child_target)
-		if self.child.state == self.child.STATE_UNDEF:
-			edge.set("color", "palegreen")
+		if self.parent.state == self.parent.STATE_UNDEF:
+			edge.set_color(self.color["undefined"])
 		else:
-			edge.set("color", "paleblue")
+			edge.set_color(self.color["defined"])
 		if parent_target is None:
 			parent_target = "None"
 		if child_target is None:
@@ -459,7 +460,7 @@ class ExecDependency(object):
 
 	def xml(self):
 		""" Generate xml Element object representing the depedency """
-		args = {"parent":self.parent.uuid.hex, "child":self.child.uuid.hex, "state":`self.state`}
+		args = {"parent":self.parent.uuid.hex, "child":self.child.uuid.hex, "state":`self.state`, "dcolor":self.color["defined"], "ucolor":self.color["undefined"]}
 		eti = et.Element("execDependency", args)
 		return eti
 
@@ -558,32 +559,44 @@ class ExecTree(object):
 		self.jobs.append(job)
 
 	def add_dep(self, parent=None, child=None, state=ExecJob.STATE_SUCCESSFULL, xml=None):
+		colors = None
+		dep = None
 		if xml is not None:
 			if xml.tag != "execDependency":
 				raise XMLError("Expect to find execDependency in xml.")
 			parent = xml.attrib["parent"]
 			child = xml.attrib["child"]
 			state = int(xml.attrib["state"])
+			colors = {"undefined":xml.attrib["ucolor"], "defined":xml.attrib["dcolor"]}
+
 		#Ensure parent and child are ExecJobs
 		if not isinstance(parent, ExecJob):
-			parent = self.find_job(parent)
+			parent = self.find_job(parent, parent)
+			if not isinstance(parent, ExecJob):
+				raise JobUndefinedError("Parent job {0} is not defined in tree: {1}.".format(parent, self.name))
 		if not isinstance(child, ExecJob):
-			child = self.find_job(child)
-
-		if parent is child:
-			raise DependencyError("Child cannot be own parent ({0}).".format(parent.name))
+			child = self.find_job(child, child)
+			if not isinstance(child, ExecJob):
+				raise JobUndefinedError("Child job {0} is not defined in tree: {1}.".format(child, self.name))
 
 		#Parent and Child must be members of the tree
 		for k in [child, parent]:
 			if k not in self.jobs:
-				try:
-					self.add_job(k)
-					logging.warning("Implicitly adding job {0} to tree {1} via dependency.".format(k.name, self.name))
-				except TreeDefinedError:
-					raise JobUndefinedError("Job {0} is not part of the tree: {1}.".format(k.name, self.name))
+				raise JobUndefinedError("Job {0} is not part of the tree: {1}.".format(k.name, self.name))
 
-		dep = ExecDependency(parent, child, state)
-		self.deps.append(dep)
+		if parent is child:
+			raise DependencyError("Child cannot be own parent ({0}).".format(parent.name))
+
+		if parent not in child.parents():
+			dep = ExecDependency(parent, child, state)
+			self.deps.append(dep)
+		else:
+			logging.warning("Duplicate dependency.")
+
+		if colors is not None:
+			dep.color = colors
+
+		return dep
 
 	def argument(self):
 		if self.iterator is None:
@@ -591,13 +604,33 @@ class ExecTree(object):
 		else:
 			return self.iterator.argument
 
-	def dot_graph(self, graph = None):
+	def _gparent_compile(self, job, gparents):
+		parents = job.parents()
+		if job in gparents:
+			return gparents[job] + parents
+		gparents[job] = []
+		for parent in parents:
+			#we don't use extend to dedupe
+			for e in self._gparent_compile(parent, gparents):
+				if e not in gparents[job]:
+					gparents[job].append(e)
+		return gparents[job] + parents
+
+	def dot_graph(self, graph=None, arborescent=False):
 		if graph is None:
 			graph = pydot.Dot(graph_type="digraph")
 		for job in self.jobs:
 			job.dot(graph)
-		for dep in self.deps:
-			dep.dot(graph)
+		if arborescent:
+			gparents = {}
+			for job in self.jobs:
+				self._gparent_compile(job, gparents)
+			for dep in self.deps:
+				if dep.parent not in gparents[dep.child]:
+					dep.dot(graph)
+		else:
+			for dep in self.deps:
+				dep.dot(graph)
 		return graph
 
 	def stems(self):
@@ -611,12 +644,9 @@ class ExecTree(object):
 			orphan = True
 			for dep in self.deps:
 				if job == dep.child:
-					#print("{0} -> {1}".format(dep.parent.name, job.name))
 					orphan = False
 					break
-			#print("working on: {0}".format(job.name))
 			if orphan:
-				#print("appending")
 				stems.append(job)
 		return stems
 
