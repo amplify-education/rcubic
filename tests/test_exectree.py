@@ -56,7 +56,7 @@ class TestET(unittest.TestCase):
 		else:
 			#we use a tmpdir so we can be reasonably sure this file does not exist..
 			path = "{0}/noexist_wh9oddaklj".format(self.workdir)
-		job = exectree.ExecJob(name, path)
+		job = exectree.ExecJob(name, path, arguments=[name])
 		if tree is not None:
 			tree.add_job(job)
 		return job
@@ -129,7 +129,12 @@ class TestET(unittest.TestCase):
 		job5 = self._newjob("buz", self.tree)
 		self.tree.add_dep(job4, job5)
 		self.tree.add_dep(job5, job4)
-		self.assertNotEqual(self.tree.validate(), [])
+		v = self.tree.validate()
+		try:
+			self.assertNotEqual(v, [])
+		except:
+			logging.debug(v)
+			raise
 
 
 	def test_xml(self, tree=None):
@@ -173,7 +178,6 @@ class TestET(unittest.TestCase):
 		self.test_validation()
 		self.test_execution()
 		self.test_graph()
-
 
 	def test_subtree(self):
 		""" Test ExecTree subtrees """

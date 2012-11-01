@@ -13,6 +13,8 @@ import fcntl
 import errno
 import sys
 import logging
+import simplejson
+import re
 
 class TreeDefinedError(RuntimeError):
 	pass
@@ -52,8 +54,9 @@ class ExecJob(object):
 			STATE_UNDEF:"gray"
 	}
 
-	def __init__(self, name="", jobpath=None, tree=None, logfile=None, xml=None, execiter=None, mustcomplete=True, subtree=None):
-		#Greenlet.__init__(self)
+	def __init__(self, name="", jobpath=None, tree=None, logfile=None, xml=None, execiter=None, mustcomplete=True, subtree=None, arguments=None):
+		if arguments is None:
+			arguments = []
 		if xml is not None:
 			if xml.tag != "execJob":
 				raise XMLError("Expect to find execJob in xml.")
@@ -65,8 +68,16 @@ class ExecJob(object):
 				subtreeuuid = xml.attrib.get("subtreeuuid", None)
 				logfile = xml.attrib.get("logfile", None)
 			except KeyError:
-				logging.error("Required xml attribute is not set")
+				logging.error("Required xml attribute is not found.")
 				raise
+			for arg in xml.findall("execArg"):
+				try:
+					arguments.append(arg.attrib["value"])
+				except KeyError:
+					logging.error(
+						"Argument of {0} is missing required xml attribute."
+						.format(name)
+					)
 			if logfile == "":
 				logfile = None
 			if jobpath == "":
@@ -79,7 +90,10 @@ class ExecJob(object):
 				subtreeuuid = uuid.UUID(subtreeuuid)
 				subtree = tree.find_subtree(subtreeuuid, None)
 				if subtree is None:
-					raise TreeDefinedError("The referenced subtree cannot be found.")
+					raise TreeDefinedError(
+						"The referenced subtree cannot be found."
+					)
+
 		else:
 			uuidi = uuid.uuid4()
 
@@ -97,10 +111,15 @@ class ExecJob(object):
 		self.logfile = logfile
 		self._progress = -1
 		self.override = False
+		self.arguments = arguments
 
 	def xml(self):
 		""" Generate xml Element object representing of ExecJob """
-		args = {"name":str(self.name), "uuid":str(self.uuid.hex), "mustcomplete":str(self.mustcomplete)}
+		args = {
+			"name":str(self.name),
+			"uuid":str(self.uuid.hex),
+			"mustcomplete":str(self.mustcomplete)
+		}
 		if self.jobpath is not None:
 			args["jobpath"] = str(self.jobpath)
 		elif self.subtree is not None:
@@ -110,10 +129,17 @@ class ExecJob(object):
 		else:
 			args["logfile"] = self.logfile
 		eti = et.Element("execJob", args)
+
+		if self.arguments is not None:
+			for arg in self.arguments:
+				eti.append(et.Element("execArg", {"value":arg}))
+
 		return eti
 
 	def __str__(self):
-		str="Job:{0} Tree:{1} UUID:{2} path:{3}".format(self.name, self.uuid, self.tree, self.jobpath)
+		str="Job:{0} Tree:{1} UUID:{2} path:{3}".format(
+			self.name, self.uuid, self.tree, self.jobpath
+		)
 
 	#TODO: setter for sub tree to ensure only subtrees are iterable
 
@@ -130,7 +156,9 @@ class ExecJob(object):
 			if value == self.UNDEF_JOB and self.state == self.STATE_IDLE:
 				self.state = self.STATE_UNDEF
 		else:
-			raise JobError("jobpath cannot be modified after job has been started")
+			raise JobError(
+				"jobpath cannot be modified after job has been started"
+			)
 
 	@property
 	def state(self):
@@ -185,7 +213,14 @@ class ExecJob(object):
 		if self.subtree.iterator is None:
 			subg.set_label(self.name)
 		else:
-			subg.set_label("{0} {1}/{2}".format(self.name, self.subtree.iterator.run, self.subtree.iterator.len()))
+			subg.set_label(
+				"{0} {1}/{2}".
+				format(
+					self.name,
+					self.subtree.iterator.run,
+					self.subtree.iterator.len()
+				)
+			)
 		logging.debug(subg.to_string())
 		self.subtree.dot_graph(subg)
 		return subg
@@ -200,6 +235,15 @@ class ExecJob(object):
 			graph.add_subgraph(rep)
 			graph.set_compound("True")
 
+	def has_defined_anscestors(self):
+		#caching results will peformance
+		for parent in self.parents():
+			if parent.is_defined():
+				return True
+			elif parent.has_defined_anscestors():
+				return True
+		return False
+		
 	def parent_deps(self):
 		deps = []
 		for dep in self.tree.deps:
@@ -223,7 +267,9 @@ class ExecJob(object):
 	def validate(self, prepend=""):
 		errors = []
 		if self.jobpath is not None and self.subtree is not None:
-			errors.append("subtree and jobpath of {0} are set. Only one can be set.")
+			errors.append(
+				"subtree and jobpath of {0} are set. Only one can be set."
+			)
 		elif self.jobpath is not None:
 			if self.jobpath == self.UNDEF_JOB:
 				#We allow existance of no-op jobs
@@ -254,6 +300,9 @@ class ExecJob(object):
 
 	def is_cancelled(self):
 		return self.state == ExecJob.STATE_CANCELLED
+
+	def is_defined(self):
+		return self.state != ExecJob.STATE_UNDEF
 
 	def _parent_wait(self):
 		for dep in self.parent_deps():
@@ -331,6 +380,10 @@ class ExecJob(object):
 		g = Greenlet.spawn(self._run)
 
 	def _run(self):
+		if self.state == self.STATE_UNDEF:
+			logging.debug("{0} is short circuiting ({1})".format(self.name, self.state))
+			self.events[self.STATE_SUCCESSFULL].set()
+			return True
 		if self.is_success():
 			return False
 
@@ -343,22 +396,23 @@ class ExecJob(object):
 		self.state = self.STATE_RUNNING
 		#rcubic.refreshStatus(self)
 		if self.jobpath is not None:
-			arguments = []
-			arguments.append(self.jobpath)
-			arguments.append(self.name)
-			arguments.append(self.tree.argument())
-			logging.debug("starting {0} {1}".format(self.name, arguments))
+			args = [self.jobpath]
+			if self.arguments is not None:
+				args.extend(self.arguments)
+			if self.tree.argument() is not None:
+				args.append(self.tree.argument())
+			logging.debug("starting {0} {1}".format(self.name, args))
 			if self.logfile is not None:
 				with open(self.logfile, 'a') as fd:
 					rcode = self._popen(
-						arguments,
+						args,
 						cwd=self.tree.cwd,
 						stdout=fd,
 						stderr=fd
 					)
 			else:
 				rcode = self._popen(
-					arguments,
+					args,
 					cwd=self.tree.cwd
 				)
 		elif self.subtree is not None:
@@ -423,15 +477,14 @@ class ExecDependency(object):
 
 	def _dot_add(self, parent_target, child_target, graph):
 		edge = pydot.Edge(parent_target, child_target)
-		if self.parent.state == self.parent.STATE_UNDEF:
-			edge.set_color(self.color["undefined"])
-		else:
+		if self.parent.is_defined():
 			edge.set_color(self.color["defined"])
+		else:
+			edge.set_color(self.color["undefined"])
 		if parent_target is None:
 			parent_target = "None"
 		if child_target is None:
 			child_target = "None"
-		logging.debug("dep: {0} -> {1}".format(parent_target, child_target))
 		graph.add_edge(edge)
 		return edge
 
@@ -600,7 +653,7 @@ class ExecTree(object):
 
 	def argument(self):
 		if self.iterator is None:
-			return ""
+			return None
 		else:
 			return self.iterator.argument
 
@@ -633,6 +686,28 @@ class ExecTree(object):
 				dep.dot(graph)
 		return graph
 
+	def json_status(self):
+		status = {}
+		for job in self.jobs:
+			status[job.name] = {
+				"status":job.STATE_COLORS[job.state],
+				"progress":job.progress
+			}
+		return simplejson.dumps(status)
+
+	# dot's html map output is: "x,y x,y x,y"
+	# but it should be: "x,y,x,y,x,y"
+	FIXCOORD = re.compile(' (?=[\d]*,[\d]*)')
+
+	def write_status(self, svg, json, overwrite=False, arborescent=True):
+		if overwrite or not os.path.exists(svg):
+			with open(svg, "w") as sfd:
+				g = self.dot_graph(arborescent=arborescent)
+				c = self.FIXCOORD.sub(',', g.create_svg())
+				sfd.write(c)
+		with open(json, "w") as jfd:
+			jfd.write(self.json_status())
+	
 	def stems(self):
 		"""
 		Finds and returns first job of most unconnected graphs
@@ -641,13 +716,9 @@ class ExecTree(object):
 		"""
 		stems = []
 		for job in self.jobs:
-			orphan = True
-			for dep in self.deps:
-				if job == dep.child:
-					orphan = False
-					break
-			if orphan:
-				stems.append(job)
+			if job.has_defined_anscestors() or not job.is_defined():
+				continue
+			stems.append(job)
 		return stems
 
 	def leaves(self):
@@ -656,12 +727,7 @@ class ExecTree(object):
 		"""
 		leaves = []
 		for job in self.jobs:
-			leaf = True
-			for dep in self.deps:
-				if job == dep.parent:
-					leaf = False
-					break
-			if leaf:
+			if len(job.child_deps()) > 0:
 				leaves.append(job)
 		return leaves
 
@@ -670,26 +736,38 @@ class ExecTree(object):
 		stems = self.stems()
 
 		if len(stems) == 0:
-			errors.append("Tree {0} has 0 stems, must be empty.".format(self.name, stems))
+			errors.append("Tree {0} is empty, has 0 stems."
+				.format(self.name, stems)
+			)
 		elif len(stems) > 1:
-			errors.append("Tree {0} has multiple stems ({1}).".format(self.name, stems))
+			errors.append(
+				"Tree {0} has multiple stems ({1})."
+				.format(
+					self.name,
+					" ".join([stem.name for stem in stems])
+				)
+			)
 
 		for stem in stems:
 			visited = []
 
-			#do we have cycles?
 			cycles = not self.validate_nocycles(stem, visited)
 			if cycles:
 				errors.append("Tree {0} has cycles.".format(self.name))
 
-			#ensure that all jobs are connected
+			#What jobs are not connected to stem?
+			unconnected = []
 			for job in self.jobs:
-				if job not in visited:
-					errors.append("Not all jobs are connected within {0}.".format(self.name))
-					break
+				if job.is_defined() and job not in visited:
+					unconnected.append(job)
+			if len(unconnected) > 0:
+				errors.append(
+					"The jobs {0} are not connected to {1}."
+					.format([job.name for job in unconnected], stem.name)
+				)
 
-			for job in self.jobs:
-				errors.extend(job.validate())
+		for job in self.jobs:
+			errors.extend(job.validate())
 
 		return errors
 
@@ -698,13 +776,15 @@ class ExecTree(object):
 		""" Ensure we do not have cyclical dependencies in the tree """
 		if parents is None:
 			parents = []
-		#print("validate job: {0} (parents:{1} children:{2})".format(job.name, [v.name for v in parents], [c.name for c in job.children()]))
+		#logging.debug("validate job: {0} (parents:{1} children:{2})".format(job.name, [v.name for v in parents], [c.name for c in job.children()]))
 		if job in parents:
 			return False
 		parents.append(job)
 		if job not in visited:
 			visited.append(job)
 		for child in job.children():
+			if child in visited:
+				continue
 			if not self.validate_nocycles(child, visited, parents):
 				return False
 		parents.remove(job)
@@ -724,6 +804,11 @@ class ExecTree(object):
 		self.done_event.set()
 		self.cancel()
 		return True
+
+	def is_success(self):
+		for job in self.jobs:
+			if not job.is_success():
+				return False
 
 	def cancel(self):
 		for job in self.jobs:
@@ -766,4 +851,10 @@ class ExecTree(object):
 	def join(self):
 		for job in self.jobs:
 			job.join()
+
+	def extend_args(self, args):
+		for job in self.jobs:
+			job.arguments.extend(args)
+		for subtree in self.subtrees:
+			subtree.extend_args(args)
 
