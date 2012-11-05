@@ -12,6 +12,7 @@ import random
 import time
 import gevent
 import logging
+import functools
 
 #class FooBar(RuntimeError):
 #	pass
@@ -150,8 +151,8 @@ class TestET(unittest.TestCase):
 		xmltree2 = tree2.xml()
 		xmlstr2 = etree.tostring(xmltree2)
 
-		#print("tree1:\n {0}".format(etree.tostring(xmltree1, pretty_print=True)))
-		#print("tree2:\n {0}".format(etree.tostring(xmltree2, pretty_print=True)))
+		logging.debug("tree1:\n {0}".format(etree.tostring(xmltree1, pretty_print=True)))
+		logging.debug("tree2:\n {0}".format(etree.tostring(xmltree2, pretty_print=True)))
 		self.assertEqual(xmlstr1, xmlstr2)
 
 	def test_execjob_nofile(self):
@@ -256,7 +257,7 @@ class TestET(unittest.TestCase):
 		self.ljob1_count += 1
 
 	def test_treetarator(self):
-		""" Test ExecTree subtrees with iteration """
+		""" Run trees with itterated subtrees """
 
 		ltree = exectree.ExecTree()
 		ltree.name = "local tree"
@@ -299,6 +300,48 @@ class TestET(unittest.TestCase):
 		logging.debug("{0} == {1}".format(self.ljob1_count, len(arguments)))
 		self.assertTrue(self.ljob1_count == len(arguments))
 		self.test_graph(target="{0}/cyt.png".format(self.workdir))
+
+	def test_resource_validation(self):
+		""" Resource validation """
+		resource = exectree.ExecResource(self.tree, "test", 1)
+		self.job1.resources.append(resource)
+		self.assertEqual(self.tree.validate(), [])
+
+		self.tree.resources.remove(resource)
+		self.assertNotEqual(self.tree.validate(), [])
+
+		self.tree.resources.append(resource)
+		self.test_xml()
+
+	def _test_resource_evhandler(self, times, state, event):
+		logging.debug("hi! {0} {1} {2}".format(type(time), type(state), type(event)))
+		times[state] = time.time()
+
+	def test_resource_use(self):
+		""" Run tree with resources """
+		resource = exectree.ExecResource(self.tree, "r3", 1)
+		times = {}
+		for j in [self.job2, self.job3]:
+			j.resources.append(resource)
+			times[j] = {}
+			for ev in [j.STATE_RUNNING, j.STATE_SUCCESSFULL]:
+				h = functools.partial(self._test_resource_evhandler, times[j], ev)
+				j.events[ev].rawlink(h)
+		with gevent.Timeout(10):
+			self.tree.run()
+		self.assertTrue(self.tree.is_done())
+		logging.debug("times {0}".format(times))
+
+		#Second job started only after first finished
+		self.assertTrue(
+			times[self.job3][self.job3.STATE_RUNNING] > times[self.job2][self.job2.STATE_SUCCESSFULL]
+			or
+			times[self.job2][self.job2.STATE_RUNNING] > times[self.job3][self.job3.STATE_SUCCESSFULL]
+		)
+
+
+
+
 
 
 

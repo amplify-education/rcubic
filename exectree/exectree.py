@@ -18,6 +18,8 @@ import re
 
 class TreeDefinedError(RuntimeError):
 	pass
+class TreeUndefinedError(RuntimeError):
+	pass
 class JobDefinedError(RuntimeError):
 	pass
 class JobError(RuntimeError):
@@ -54,10 +56,15 @@ class ExecJob(object):
 			STATE_UNDEF:"gray"
 	}
 
-	def __init__(self, name="", jobpath=None, tree=None, logfile=None, xml=None, execiter=None, mustcomplete=True, subtree=None, arguments=None):
+	def __init__(self, name="", jobpath=None, tree=None, logfile=None, xml=None, execiter=None, mustcomplete=True, subtree=None, arguments=None, resources=None):
 		if arguments is None:
 			arguments = []
+		if resources is None:
+			resources = []
 		if xml is not None:
+			if tree is None: 
+				#TODO make tree param required
+				raise TreeUndefinedError("Tree is not known")
 			if xml.tag != "execJob":
 				raise XMLError("Expect to find execJob in xml.")
 			try:
@@ -78,14 +85,15 @@ class ExecJob(object):
 						"Argument of {0} is missing required xml attribute."
 						.format(name)
 					)
+			resources = []
+			for resource in xml.findall("execResource"):
+				fr = tree.find_resource(resource.attrib["uuid"])
+				if fr is not None:
+					resources.append(fr)
 			if logfile == "":
 				logfile = None
 			if jobpath == "":
 				jobpath = None
-			if tree is None and subtreeuuid is not None:
-				raise JobUndefinedError(
-					"The tree the job belongs to needs to be known so we can find subtree"
-				)
 			elif subtreeuuid is not None:
 				subtreeuuid = uuid.UUID(subtreeuuid)
 				subtree = tree.find_subtree(subtreeuuid, None)
@@ -98,7 +106,7 @@ class ExecJob(object):
 			uuidi = uuid.uuid4()
 
 		self.events = {}
-		for e in self.DONE_STATES:
+		for e in self.STATES:
 			self.events[e] = gevent.event.Event()
 		self.name = name
 		self.uuid = uuidi
@@ -112,6 +120,7 @@ class ExecJob(object):
 		self._progress = -1
 		self.override = False
 		self.arguments = arguments
+		self.resources = resources
 
 	def xml(self):
 		""" Generate xml Element object representing of ExecJob """
@@ -133,6 +142,10 @@ class ExecJob(object):
 		if self.arguments is not None:
 			for arg in self.arguments:
 				eti.append(et.Element("execArg", {"value":arg}))
+
+		if self.resources is not None:
+			for resource in self.resources:
+				eti.append(et.Element("execResource", {"uuid":str(resource.uuid.hex)}))
 
 		return eti
 
@@ -167,7 +180,7 @@ class ExecJob(object):
 	@state.setter
 	def state(self, value):
 		self._state = value
-		if self._state in self.DONE_STATES:
+		if self._state in self.STATES:
 			self.events[self._state].set()
 
 	@property
@@ -243,7 +256,7 @@ class ExecJob(object):
 			elif parent.has_defined_anscestors():
 				return True
 		return False
-		
+
 	def parent_deps(self):
 		deps = []
 		for dep in self.tree.deps:
@@ -289,6 +302,13 @@ class ExecJob(object):
 			errors.extend(self.subtree.validate())
 		else:
 			errors.append("subtree or jobpath of {0} must be set.")
+
+		for resource in self.resources:
+			if resource not in self.tree.resources:
+				errors.append(
+					"{0} Resource {1} is needed for job {2} is not part of tree {3}".
+					format(prepend, resource, self.name, self.tree.name)
+				)
 
 		return errors
 
@@ -379,6 +399,36 @@ class ExecJob(object):
 	def start(self):
 		g = Greenlet.spawn(self._run)
 
+	def _release_resources(self, resources):
+		logging.debug("releasing: {0}".format(resources))
+		for r in resources:
+			r.release()
+
+	def _acquire_resources(self, acquire_timeout=60, max_attempts=1000):
+		if len(self.resources) < 1:
+			return True
+		reserved = []
+		lastacquire = False
+		backofftime = len(self.resources) * acquire_timeout
+		attempt = 0
+		while True:
+			for resource in self.resources:
+				if resource.reserve(acquire_timeout):
+					reserved.append(resource)
+					lastacquire = True
+				else:
+					lastacquire  = False
+					break
+			if lastacquire == False:
+				attempt += 1
+				self._release_resources(reserved)
+				gevent.sleep(backofftime + random.randint(0, acquire_timeout))
+				if max_attempts > 0 and attemp >= max_attempts:
+					break
+			else:
+				break
+		return lastacquire
+
 	def _run(self):
 		if self.state == self.STATE_UNDEF:
 			logging.debug("{0} is short circuiting ({1})".format(self.name, self.state))
@@ -391,37 +441,48 @@ class ExecJob(object):
 		self._parent_wait()
 		if self.state in self.DONE_STATES:
 			return None
-		logging.debug("{0} is starting".format(self.name))
 
-		self.state = self.STATE_RUNNING
-		#rcubic.refreshStatus(self)
-		if self.jobpath is not None:
-			args = [self.jobpath]
-			if self.arguments is not None:
-				args.extend(self.arguments)
-			if self.tree.argument() is not None:
-				args.append(self.tree.argument())
-			logging.debug("starting {0} {1}".format(self.name, args))
-			if self.logfile is not None:
-				with open(self.logfile, 'a') as fd:
+		if not self._acquire_resources():
+			self.state = self.STATE_FAILED
+			logging.debug(
+				"Resource deadlock prevention exceeded max attemps for {}.".
+				format(self.name)
+			)
+			return False
+
+		try:
+			logging.debug("{0} is starting".format(self.name))
+			self.state = self.STATE_RUNNING
+			#rcubic.refreshStatus(self)
+			if self.jobpath is not None:
+				args = [self.jobpath]
+				if self.arguments is not None:
+					args.extend(self.arguments)
+				if self.tree.argument() is not None:
+					args.append(self.tree.argument())
+				logging.debug("starting {0} {1}".format(self.name, args))
+				if self.logfile is not None:
+					with open(self.logfile, 'a') as fd:
+						rcode = self._popen(
+							args,
+							cwd=self.tree.cwd,
+							stdout=fd,
+							stderr=fd
+						)
+				else:
 					rcode = self._popen(
 						args,
-						cwd=self.tree.cwd,
-						stdout=fd,
-						stderr=fd
+						cwd=self.tree.cwd
 					)
-			else:
-				rcode = self._popen(
-					args,
-					cwd=self.tree.cwd
-				)
-		elif self.subtree is not None:
-			logging.debug("starting {0} {1}".format(self.name, "subtree"))
-			rcode = self.subtree.iterrun()
-			#TODO: compute rcode
-			logging.warning("Sub tree is not checked for success before proceeding")
-			rcode = 0
-		logging.debug("finished {0} status {1}".format(self.name, rcode))
+			elif self.subtree is not None:
+				logging.debug("starting {0} {1}".format(self.name, "subtree"))
+				rcode = self.subtree.iterrun()
+				#TODO: compute rcode
+				logging.warning("Sub tree is not checked for success before proceeding")
+				rcode = 0
+			logging.debug("finished {0} status {1}".format(self.name, rcode))
+		finally:
+			self._release_resources(self.resources)
 
 		if rcode == 0:
 			self.state = self.STATE_SUCCESSFULL
@@ -463,6 +524,62 @@ class ExecIter(object):
 			raise IterratorOverrunError("Iterator has no more elements")
 		else:
 			return self.args[self.run-1]
+
+class ExecResource(object):
+	def __init__(self, tree, name="", avail=0, xml=None):
+		if xml is not None:
+			if xml.tag != "execResource":
+				raise XMLError("Expect to find execResource in xml.")
+			name = xml.attrib.get("name", "")
+			uuidi = uuid.UUID(xml.attrib["uuid"])
+			avail = xml.attrib.get("avail", -1)
+		else:
+			uuidi = uuid.uuid4()
+		self.name = name
+		self.avail = avail
+		self.used = 0
+		self.event = gevent.event.Event()
+		self.uuid = uuidi
+		tree.resources.append(self)
+
+	def __str__(self):
+		return "Resource_{0}_{0}".format(self.name, self.uuid)
+
+	def xml(self):
+		args = {
+			"name":str(self.name),
+			"uuid":str(self.uuid.hex),
+			"avail":str(self.avail),
+		}
+		eri = et.Element("execResource", args)
+		return eri
+
+
+	def reserve(self, blocking=True, timeout=None):
+		if self.avail < 0:
+			return True
+		if self.used < self.avail:
+			self.used += 1
+		elif blocking:
+			try:
+				with gevent.Timeout(timeout):
+					while self.used >= self.avail:
+						self.event.wait()
+					self.used += 1
+			except gevent.timeout.Timeout:
+				return False
+		else:
+			return False
+		return True
+
+	def release(self):
+		if self.avail < 0:
+			return
+		if self.used <= 0:
+			self.used = 0
+		else:
+			self.used -=1
+		self.event.set()
 
 class ExecDependency(object):
 	def __init__(self, parent, child, state=ExecJob.STATE_SUCCESSFULL):
@@ -524,6 +641,7 @@ class ExecTree(object):
 		self.deps = []
 		self.subtrees = []
 		self.done_event = gevent.event.Event()
+		self.resources = []
 		if xml == None:
 			self.uuid = uuid.uuid4()
 			self.name = ""
@@ -541,6 +659,8 @@ class ExecTree(object):
 			self.uuid = uuid.UUID(xml.attrib["uuid"])
 			self.cwd = xml.attrib.get("cwd", "/")
 			#print("name:{0} href:{1} uuid:{2}".format(self.name, self.href, self.uuid))
+			for xmlres in xml.findall("execResource"):
+				ExecResource(self, xml=xmlres)
 			for xmlsubtree in xml.findall("execTree"):
 				self.subtrees.append(ExecTree(xmlsubtree))
 			for xmljob in xml.findall("execJob"):
@@ -571,6 +691,8 @@ class ExecTree(object):
 			eti.append(job.xml())
 		for dep in self.deps:
 			eti.append(dep.xml())
+		for resource in self.resources:
+			eti.append(resource.xml())
 		return eti
 
 	def __str__(self):
@@ -580,6 +702,14 @@ class ExecTree(object):
 		for job in self.jobs:
 			if job.name == key:
 				return job
+		return default
+
+	def find_resource(self, needle, default=None):
+		for resource in self.resources:
+			if resource.uuid.hex == needle:
+				return resource
+			elif resource.name == needile:
+				return resource
 		return default
 
 	def find_subtree(self, uuid, default=None):
