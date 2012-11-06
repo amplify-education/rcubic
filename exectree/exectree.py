@@ -43,7 +43,7 @@ class ExecJob(object):
 	DEPENDENCY_STATES = [ STATE_SUCCESSFULL, STATE_FAILED ]
 	DONE_STATES = [ STATE_SUCCESSFULL, STATE_FAILED, STATE_CANCELLED, STATE_UNDEF ]
 	SUCCESS_STATES = [ STATE_SUCCESSFULL, STATE_UNDEF ]
-	ERROR_STATES = [ STATE_SUCCESSFULL, STATE_CANCELLED ]
+	ERROR_STATES = [ STATE_FAILED, STATE_CANCELLED ]
 	PRESTART_STATES = [ STATE_IDLE, STATE_UNDEF ]
 	UNDEF_JOB = "-"
 
@@ -62,7 +62,7 @@ class ExecJob(object):
 		if resources is None:
 			resources = []
 		if xml is not None:
-			if tree is None: 
+			if tree is None:
 				#TODO make tree param required
 				raise TreeUndefinedError("Tree is not known")
 			if xml.tag != "execJob":
@@ -108,9 +108,11 @@ class ExecJob(object):
 		self.events = {}
 		for e in self.STATES:
 			self.events[e] = gevent.event.Event()
+		self.statechange = gevent.event.Event()
 		self.name = name
 		self.uuid = uuidi
 		self._tree = tree
+		self._state = None
 		self.state = self.STATE_IDLE
 		self.subtree = subtree
 		self.jobpath = jobpath
@@ -121,6 +123,7 @@ class ExecJob(object):
 		self.override = False
 		self.arguments = arguments
 		self.resources = resources
+		self.execcount = 0
 
 	def xml(self):
 		""" Generate xml Element object representing of ExecJob """
@@ -179,9 +182,13 @@ class ExecJob(object):
 
 	@state.setter
 	def state(self, value):
+		if value not in self.STATES:
+			raise UnknownStateError("Job state cannot be changed to {0}.".format(value))
+		if self._state == value:
+			return
 		self._state = value
-		if self._state in self.STATES:
-			self.events[self._state].set()
+		self.statechange.set()
+		self.events[self._state].set()
 
 	@property
 	def tree(self):
@@ -318,6 +325,9 @@ class ExecJob(object):
 	def is_success(self):
 		return self.state in ExecJob.SUCCESS_STATES
 
+	def is_failed(self):
+		return self.state == ExecJob.STATE_FAILED
+
 	def is_cancelled(self):
 		return self.state == ExecJob.STATE_CANCELLED
 
@@ -396,8 +406,6 @@ class ExecJob(object):
 		self.state = self.STATE_CANCELLED
 		return True
 
-	def start(self):
-		g = Greenlet.spawn(self._run)
 
 	def _release_resources(self, resources):
 		logging.debug("releasing: {0}".format(resources))
@@ -429,14 +437,31 @@ class ExecJob(object):
 				break
 		return lastacquire
 
-	def _run(self):
+	def read_log(self, size):
+		if self.logfile is None:
+			return ""
+		try:
+			with open(self.logfile, 'r') as fd:
+				fd.seek(0,2)
+				filesize = fd.tell()
+				fd.seek(max(-size, -filesize), 2)
+				return fd.read()
+		except:
+			logging.exception("Failed to read log file")
+			return ""
+
+	def start(self):
 		if self.state == self.STATE_UNDEF:
 			logging.debug("{0} is short circuiting ({1})".format(self.name, self.state))
 			self.events[self.STATE_SUCCESSFULL].set()
 			return True
 		if self.is_success():
 			return False
+		g = Greenlet.spawn(self._run)
+		self.execcount += 1
+		return True
 
+	def _run(self):
 		logging.debug("{0} is idling ({1})".format(self.name, self.state))
 		self._parent_wait()
 		if self.state in self.DONE_STATES:
@@ -642,6 +667,7 @@ class ExecTree(object):
 		self.subtrees = []
 		self.done_event = gevent.event.Event()
 		self.resources = []
+		self.cancelled = False
 		if xml == None:
 			self.uuid = uuid.uuid4()
 			self.name = ""
@@ -837,7 +863,7 @@ class ExecTree(object):
 				sfd.write(c)
 		with open(json, "w") as jfd:
 			jfd.write(self.json_status())
-	
+
 	def stems(self):
 		"""
 		Finds and returns first job of most unconnected graphs
@@ -941,6 +967,8 @@ class ExecTree(object):
 				return False
 
 	def cancel(self):
+		if self.cancelled:
+			return
 		for job in self.jobs:
 			job.cancel()
 
@@ -954,8 +982,7 @@ class ExecTree(object):
 			logging.debug("Jobs have been spun up for {0}. I'm gonna chill".format(self.name))
 			gevent.sleep(1)
 			logging.debug("Chilling is done. Impatiently waiting for jobs of {0} to finish".format(self.name))
-			#self.join()
-			self.done_event.wait()
+			self.join()
 			logging.debug("Tree {0} has finished execution.".format(self.name))
 
 	def advance(self):
@@ -979,8 +1006,7 @@ class ExecTree(object):
 			self.advance()
 
 	def join(self):
-		for job in self.jobs:
-			job.join()
+		self.done_event.wait()
 
 	def extend_args(self, args):
 		for job in self.jobs:

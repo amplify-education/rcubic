@@ -31,10 +31,20 @@ class TestET(unittest.TestCase):
 		self.tree.add_dep(self.job1, self.job2)
 		self.tree.add_dep(self.job1, self.job3)
 
-	def tearDown(self):
+	def _tearDown(self):
 		shutil.rmtree(self.workdir, False)
+	
+	
+	def _logfile_init(self, job):
+		fd, path = tempfile.mkstemp(prefix="{0}_inst".format(job.name), dir=self.workdir)
+		os.fdopen(fd).close()
+		job.logfile = path
 
-	def _newjob(self, name, tree=None, vexec=True, vfile=True, exitcode=0, maxsleep=3):
+	def _logfile_read(self, job):
+		with open(job.logfile) as log:
+			return log.read()
+
+	def _newjob(self, name, tree=None, vexec=True, vfile=True, exitcode=0, maxsleep=3, append=""):
 		"""
 		Create job file, job and return the ExecJob
 
@@ -49,6 +59,7 @@ class TestET(unittest.TestCase):
 			os.write(fd, "echo \"hello my name is {0}\"\n".format(name))
 			if maxsleep > 0:
 				os.write(fd, "sleep \"{0}\"\n".format(random.randrange(0, maxsleep)))
+			os.write(fd, append)
 			os.write(fd, "exit {0}\n".format(exitcode))
 			os.close(fd)
 			if vexec:
@@ -262,9 +273,8 @@ class TestET(unittest.TestCase):
 		ltree = exectree.ExecTree()
 		ltree.name = "local tree"
 		ljob1 = self._newjob("sal", ltree)
-		ljob1_file_fd, ljob1_file_path = tempfile.mkstemp(prefix="{0}_inst".format(ljob1.name), dir=self.workdir)
-		os.fdopen(ljob1_file_fd).close
-		ljob1.logfile = ljob1_file_path
+		self._logfile_init(ljob1)
+
 		ljob2 = self._newjob("sov", ltree)
 		ltree.add_dep(ljob1, ljob2)
 
@@ -286,9 +296,7 @@ class TestET(unittest.TestCase):
 			runreturn = self.tree.run()
 
 		#Confirm that we see all 3 arguments
-		ljob1_file_fd = open(ljob1_file_path)
-		text = ljob1_file_fd.read()
-		ljob1_file_fd.close()
+		text = self._logfile_read(ljob1)
 		last = 0
 		for arg in arguments:
 			last = text.find(self.my_arg_str_match.format(arg), last)
@@ -338,6 +346,39 @@ class TestET(unittest.TestCase):
 			or
 			times[self.job2][self.job2.STATE_RUNNING] > times[self.job3][self.job3.STATE_SUCCESSFULL]
 		)
+
+	def test_fail_reschedule_succeed(self):
+		""" Reschedule failed job """
+		tfd, tpath = tempfile.mkstemp(dir=self.workdir)
+		os.close(tfd)
+
+		logging.debug("tempfile: {0}".format(tpath))
+		append = "if [ -e {0} ]; then exit 1; fi\n".format(tpath)
+		job4 = self._newjob("qor", self.tree, append=append)
+		job5 = self._newjob("qam", self.tree)
+		self.tree.add_dep(self.job3, job4)
+		self.tree.add_dep(job4, job5)
+
+		self._logfile_init(job4)
+
+		with gevent.Timeout(10):
+			self.tree.run(blocking=False)
+			logging.debug("Tree started, waiting for failure")
+			logging.debug("dirs before: {0}".format(os.listdir(self.workdir)))
+			job4.events[job4.STATE_FAILED].wait()
+			os.remove(tpath)
+			logging.debug("dirs after: {0}".format(os.listdir(self.workdir)))
+			logging.debug("Failure detected, resetting and restarting job")
+			logging.debug("job4 log: {0}".format(self._logfile_read(job4)))
+			job4.reset()
+			job4.start()
+			logging.debug("job started")
+			self.tree.join()
+
+		self.assertTrue(job4.execcount == 2)
+		self.assertTrue(self.tree.is_done())
+
+
 
 
 
