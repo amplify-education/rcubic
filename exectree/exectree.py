@@ -153,9 +153,7 @@ class ExecJob(object):
 		return eti
 
 	def __str__(self):
-		str="Job:{0} Tree:{1} UUID:{2} path:{3}".format(
-			self.name, self.uuid, self.tree, self.jobpath
-		)
+		return "<ExecJob {0}>".format(self.name)
 
 	#TODO: setter for sub tree to ensure only subtrees are iterable
 
@@ -397,7 +395,6 @@ class ExecJob(object):
 		logging.debug("job {0} has been reset.".format(self.name))
 
 	def cancel(self):
-		logging.debug("Cancel is invoked on {0}".format(self.name))
 		if self.state == self.STATE_RUNNING:
 			return False
 		if self.state in self.DONE_STATES:
@@ -421,7 +418,7 @@ class ExecJob(object):
 		attempt = 0
 		while True:
 			for resource in self.resources:
-				if resource.reserve(acquire_timeout):
+				if resource.reserve(timeout=acquire_timeout):
 					reserved.append(resource)
 					lastacquire = True
 				else:
@@ -431,7 +428,7 @@ class ExecJob(object):
 				attempt += 1
 				self._release_resources(reserved)
 				gevent.sleep(backofftime + random.randint(0, acquire_timeout))
-				if max_attempts > 0 and attemp >= max_attempts:
+				if max_attempts > 0 and attempt >= max_attempts:
 					break
 			else:
 				break
@@ -469,8 +466,8 @@ class ExecJob(object):
 
 		if not self._acquire_resources():
 			self.state = self.STATE_FAILED
-			logging.debug(
-				"Resource deadlock prevention exceeded max attemps for {}.".
+			logging.warning(
+				"Resource deadlock prevention exceeded max attemps for {0}.".
 				format(self.name)
 			)
 			return False
@@ -526,6 +523,9 @@ class ExecIter(object):
 		self.valid = None
 		self.name = name
 
+	def __str__(self):
+		return "<ExecIter {0}>".format(self.name)
+
 	def is_exhausted(self):
 		if self.run >= len(self.args):
 			return True
@@ -568,7 +568,7 @@ class ExecResource(object):
 		tree.resources.append(self)
 
 	def __str__(self):
-		return "Resource_{0}_{0}".format(self.name, self.uuid)
+		return "<ExecResource {0}>".format(self.name)
 
 	def xml(self):
 		args = {
@@ -589,7 +589,8 @@ class ExecResource(object):
 			try:
 				with gevent.Timeout(timeout):
 					while self.used >= self.avail:
-						self.event.wait()
+						if self.event.wait(1):
+							self.event.clear()
 					self.used += 1
 			except gevent.timeout.Timeout:
 				return False
@@ -630,6 +631,9 @@ class ExecDependency(object):
 		graph.add_edge(edge)
 		return edge
 
+	def __str__(self):
+		return "<ExecDependency {0}-{1}>".format(self.parent.name, self.child.name)
+
 	def dot(self, graph):
 		""" Generate dot edge object repersenting dependency """
 
@@ -666,8 +670,10 @@ class ExecTree(object):
 		self.deps = []
 		self.subtrees = []
 		self.done_event = gevent.event.Event()
+		self._done = False
 		self.resources = []
 		self.cancelled = False
+		self.started = False
 		if xml == None:
 			self.uuid = uuid.uuid4()
 			self.name = ""
@@ -722,7 +728,7 @@ class ExecTree(object):
 		return eti
 
 	def __str__(self):
-		return ("Subtree_{0}_{1}".format(self.name, self.uuid))
+		return "<ExecTree {0}>".format(self.name)
 
 	def __getitem__(self, key, default=None):
 		for job in self.jobs:
@@ -734,7 +740,7 @@ class ExecTree(object):
 		for resource in self.resources:
 			if resource.uuid.hex == needle:
 				return resource
-			elif resource.name == needile:
+			elif resource.name == needle:
 				return resource
 		return default
 
@@ -947,7 +953,6 @@ class ExecTree(object):
 		return True
 
 	def _is_done_event(self, instance):
-		logging.debug("Are we done yet?")
 		self.is_done()
 
 	def is_done(self):
@@ -956,15 +961,16 @@ class ExecTree(object):
 				if not job.is_done():
 					logging.debug("{0} is not done".format(job.name))
 					return False
-		logging.debug("Yes, we are done.")
 		self.done_event.set()
 		self.cancel()
+		self.done = True
 		return True
 
 	def is_success(self):
 		for job in self.jobs:
 			if not job.is_success():
 				return False
+		return True
 
 	def cancel(self):
 		if self.cancelled:
@@ -972,18 +978,45 @@ class ExecTree(object):
 		for job in self.jobs:
 			job.cancel()
 
-	def run(self, blocking=True):
+	def run(self, blocking=True, timeout=None):
 		logging.debug("About to spin up jobs for {0}".format(self.name))
 		for job in self.jobs:
 			for ek, ev in job.events.items():
 				ev.rawlink(self._is_done_event)
 			job.start()
+		self.started = True
 		if blocking:
-			logging.debug("Jobs have been spun up for {0}. I'm gonna chill".format(self.name))
-			gevent.sleep(1)
-			logging.debug("Chilling is done. Impatiently waiting for jobs of {0} to finish".format(self.name))
-			self.join()
-			logging.debug("Tree {0} has finished execution.".format(self.name))
+			try:
+				with gevent.Timeout(timeout):
+					logging.debug(
+						"Jobs have been spun up for {0}. I'm gonna chill"
+						.format(self.name)
+					)
+					gevent.sleep(1)
+					logging.debug(
+						"Chilling is done. Impatiently waiting for jobs of {0} to finish"
+						.format(self.name)
+					)
+					self.join()
+					logging.debug(
+						"Tree {0} has finished execution."
+						.format(self.name)
+					)
+			except gevent.timeout.Timeout:
+				logging.warning("Execution of tree exceeded time limit ({0} seconds).".format(timeout))
+				self.cancel()
+				return
+
+	#TODO make event based
+	def _json_updater(self, path):
+		while not self._done:
+			gevent.sleep(5)
+			logging.debug("updating json")
+			with open(path, "w") as fd:
+				fd.write(self.json_status())
+
+	def spawn_json_updater(self, path):
+		Greenlet.spawn(self._json_updater, path)
 
 	def advance(self):
 		logging.debug("Advancing tree {0}.".format(self.name))

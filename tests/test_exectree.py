@@ -14,11 +14,11 @@ import gevent
 import logging
 import functools
 
-#class FooBar(RuntimeError):
-#	pass
-
 class TestET(unittest.TestCase):
 	def setUp(self):
+		#logger = logging.getLogger('')
+		#logger.setLevel(logging.DEBUG)
+
 		self.workdir = tempfile.mkdtemp(prefix="rct")
 		self.my_arg_str_print = "echo \"MYARGS_WERE: {0}\"\n"
 		self.my_arg_str_match = "MYARGS_WERE: {0}"
@@ -33,8 +33,8 @@ class TestET(unittest.TestCase):
 
 	def _tearDown(self):
 		shutil.rmtree(self.workdir, False)
-	
-	
+
+
 	def _logfile_init(self, job):
 		fd, path = tempfile.mkstemp(prefix="{0}_inst".format(job.name), dir=self.workdir)
 		os.fdopen(fd).close()
@@ -322,30 +322,46 @@ class TestET(unittest.TestCase):
 		self.test_xml()
 
 	def _test_resource_evhandler(self, times, state, event):
-		logging.debug("hi! {0} {1} {2}".format(type(time), type(state), type(event)))
 		times[state] = time.time()
 
 	def test_resource_use(self):
 		""" Run tree with resources """
 		resource = exectree.ExecResource(self.tree, "r3", 1)
 		times = {}
-		for j in [self.job2, self.job3]:
+		jobs = [self.job2, self.job3]
+		i = 0
+		while i < 5:
+			job = self._newjob("pol{0}".format(i), self.tree)
+			self.tree.add_dep(self.job1, job)
+			jobs.append(job)
+			i += 1
+		for j in jobs:
+			j.logfile = "/dev/null"
 			j.resources.append(resource)
 			times[j] = {}
 			for ev in [j.STATE_RUNNING, j.STATE_SUCCESSFULL]:
 				h = functools.partial(self._test_resource_evhandler, times[j], ev)
 				j.events[ev].rawlink(h)
-		with gevent.Timeout(10):
+		with gevent.Timeout(30):
 			self.tree.run()
 		self.assertTrue(self.tree.is_done())
+		self.assertTrue(self.tree.is_success())
 		logging.debug("times {0}".format(times))
 
-		#Second job started only after first finished
-		self.assertTrue(
-			times[self.job3][self.job3.STATE_RUNNING] > times[self.job2][self.job2.STATE_SUCCESSFULL]
-			or
-			times[self.job2][self.job2.STATE_RUNNING] > times[self.job3][self.job3.STATE_SUCCESSFULL]
-		)
+		#No jobs overlapped?
+		for job in jobs:
+			for sjob in jobs:
+				if job == sjob:
+					continue
+				jr = times[job][job.STATE_RUNNING]
+				js = times[job][job.STATE_SUCCESSFULL]
+				sjr = times[sjob][sjob.STATE_RUNNING]
+				sjs = times[sjob][sjob.STATE_SUCCESSFULL]
+				self.assertTrue(
+					(jr > sjr and jr > sjs)
+					or
+					(jr < sjr and jr < sjs)
+				)
 
 	def test_fail_reschedule_succeed(self):
 		""" Reschedule failed job """
@@ -377,14 +393,6 @@ class TestET(unittest.TestCase):
 
 		self.assertTrue(job4.execcount == 2)
 		self.assertTrue(self.tree.is_done())
-
-
-
-
-
-
-
-
 
 if  __name__ == '__main__':
 	unittest.main()
