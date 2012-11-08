@@ -56,7 +56,7 @@ class ExecJob(object):
 			STATE_UNDEF:"gray"
 	}
 
-	def __init__(self, name="", jobpath=None, tree=None, logfile=None, xml=None, execiter=None, mustcomplete=True, subtree=None, arguments=None, resources=None):
+	def __init__(self, name="", jobpath=None, tree=None, logfile=None, xml=None, execiter=None, mustcomplete=True, subtree=None, arguments=None, resources=None, href=""):
 		if arguments is None:
 			arguments = []
 		if resources is None:
@@ -74,6 +74,7 @@ class ExecJob(object):
 				mustcomplete = xml.attrib.get("mustcomplete", False) == "True"
 				subtreeuuid = xml.attrib.get("subtreeuuid", None)
 				logfile = xml.attrib.get("logfile", None)
+				href = xml.attrib.get("href", "")
 			except KeyError:
 				logging.error("Required xml attribute is not found.")
 				raise
@@ -124,13 +125,15 @@ class ExecJob(object):
 		self.arguments = arguments
 		self.resources = resources
 		self.execcount = 0
+		self.href = href
 
 	def xml(self):
 		""" Generate xml Element object representing of ExecJob """
 		args = {
 			"name":str(self.name),
 			"uuid":str(self.uuid.hex),
-			"mustcomplete":str(self.mustcomplete)
+			"mustcomplete":str(self.mustcomplete),
+			"href":str(self.href)
 		}
 		if self.jobpath is not None:
 			args["jobpath"] = str(self.jobpath)
@@ -218,9 +221,9 @@ class ExecJob(object):
 			style = "filled",
 			fillcolor = self.STATE_COLORS[self.state]
 			)
-		if self.tree.href:
-			node.set_labelhref('foo')
-			node.set_href("{0}{1}".format(self.tree.href,self.name))
+		if self.href:
+			#node.set_labelhref(self.name)
+			node.set_href(self.href)
 		return node
 
 	def _dot_tree(self):
@@ -769,7 +772,7 @@ class ExecTree(object):
 
 	def add_job(self, job):
 		if self.find_job(job.name):
-			raise jobDefinedError("Job with same name already part of tree")
+			raise JobDefinedError("Job with same name ({0}) already part of tree".format(job))
 		job.tree = self
 		self.jobs.append(job)
 
@@ -833,7 +836,7 @@ class ExecTree(object):
 
 	def dot_graph(self, graph=None, arborescent=False):
 		if graph is None:
-			graph = pydot.Dot(graph_type="digraph")
+			graph = pydot.Dot(graph_type="digraph", bgcolor="transparent")
 		for job in self.jobs:
 			job.dot(graph)
 		if arborescent:
