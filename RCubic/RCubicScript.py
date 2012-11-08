@@ -24,125 +24,43 @@ import os
 import logging
 import time
 import re
+import fnmatch
 from exectree import exectree
 from lxml import etree
 
 
-class RcubicScript(object):
-	def __init__(self, name, path, hdep, sdep, cdep, resources, products, phase=0):
-		self.name = name
-		self.path = path
-		self.hdep = hdep
-		self.sdep = sdep
-		self.cdep = cdep
-		self.resources = resources
-		self.products = products
-		self.job = None
-		self.phase = phase
-
-class RCubicGroup(object):
-	def __init__(self, name, phase=0, version=None):
-		self.name = name
-		self.phase = phase
+class RCubicScript(object):
+	def __init__(self, filepath, version, override, phase, logdir, whitelist, blacklist, regexval, group):
+		self.path = filepath
+		self.name = filepath.split("/")[-1]
 		self.version = version
+		self.overrider = override
+		self.logfile = "{0}/{1}".format(logdir, self.name)
 
-	def __str__(self):
-		return self.name
-
-class RCubicScriptParser(object):
-	PHASES = {"DEFAULT":0, "EARLY":-1, "LATE":1}
-	def __init__(self, directory, groups):
-		self.directory = directory
-		self.groups = groups
-		self.scripts = []
-
-	def read_dirs(self):
-		failed_groups = []
-		for group in self.groups:
-			directory = "{0}/{1}".format(self.directory, group)
-			if not os.path.exists(directory):
-				failed_groups.append(group)
-				continue
-			files = 0
-			for filename in os.listdir(directory):
-				filepath = "{0}/{1}".format(directory, filename)
-				if filename.startswith("{0}_".format(group)):
-					self.parse_script(filepath, group.phase)
-				else:
-					logging.debug(
-							"Skipping {0}/{1}, does not start with {2}_."
-							.format(filepath, group)
-						)
-
-	def parse_script(self, filepath, phase=0):
-		f = open(filepath)
-		script = f.read()
-		name = filepath.split("/")[-1]
-		hdep = self._get_header_field(script, "HDEP")
-		sdep = self._get_header_field(script, "SDEP")
-		cdep = self._get_header_field(script, "CDEP")
-		resources = self._get_header_field(script, "RESOURCES")
-		products = self._get_header_field(script, "PRODUCT")
+		with open(self.path) as fd:
+			script = fd.read()
+		self.hdep = self._get_header_field(script, "HDEP")
+		self.sdep = self._get_header_field(script, "SDEP")
+		self.cdep = self._get_header_field(script, "CDEP")
+		self.resources = self._get_header_field(script, "RESOURCES")
+		self.resources.append("default")
+		self.products = self._get_header_field(script, "PRODUCT")
 		sphase = self._get_header_field(script, "PHASE")
+		self.group = group
+		if regexval is None:
+			self.regexval = True
+		else:
+			r = regexval.search(script)
+			self.regexval = r is not None
+
 		if len(sphase) >= 1:
 			phase = RCubicScriptParser.PHASES[sphase[0]]
+		self.phase = phase
 
-		rs = RcubicScript(name, filepath, hdep, sdep, cdep, resources, products, phase)
-		self.scripts.append(rs)
-
-		"""
-		logging.debug("Script: {0}\n\t{1}\n\t{2}\n\t{3}\n\t{4}\n\t{5}\n\t{6}"
-			.format(
-				filepath,
-				hdep,
-				sdep,
-				cdep,
-				resources,
-				products,
-				phase,
-			)
-		)
-		"""
-
-	def init_tree(self):
-		self.tree = exectree.ExecTree()
-		for script in self.scripts:
-			script.job = exectree.ExecJob(
-				script.name,
-				script.path
-			)
-			self.tree.add_job(script.job)
-		for script in self.scripts:
-			for dep in script.hdep:
-				d = self.tree.add_dep(dep, script.job)
-				d.color = {"defined":"deepskyblue", "undefined":"red"}
-			for dep in script.sdep:
-				try:
-					d = self.tree.add_dep(dep, script.job)
-				except exectree.JobUndefinedError:
-					dep = exectree.ExecJob(dep, "-", mustcomplete=False)
-					self.tree.add_job(dep)
-					d = self.tree.add_dep(dep, script.job)
-				d.color = {"defined":"lawngreen", "undefined":"palegreen"}
-			for cdep in script.cdep:
-				try:
-					d = self.tree.add_dep(script.job, dep)
-				except exectree.JobUndefinedError:
-					dep = self.tree.add_job(
-						exectree.ExecJob(dep, "-", mustcomplete=False)
-					)
-					d = self.tree.add_dep(script.job, dep)
-				d.color = {"defined":"lawngreen", "undefined":"palegreen"}
-			stems = self.tree.stems()
-			for pdep in self.scripts:
-				#if pdep.phase < script.phase and pdep.job in stems:
-				if pdep.phase < script.phase:
-					d = self.tree.add_dep(pdep.job, script.job)
-					if d is None:
-						continue
-					d.color = {"defined":"gold2", "undefined":"gold2"}
-		logging.debug("tree:\n{0}".format(etree.tostring(self.tree.xml(), pretty_print=True)))
-		return self.tree
+		if len(blacklist) > 0 and name in blacklist:
+			self.path="-"
+		elif len(whitelist) > 0 and name not in whitelist:
+			self.path="-"
 
 	def _get_header_field(self, script, field):
 		fieldre = re.compile("^[\s]*#%s:.*$" %(field), re.MULTILINE)
@@ -171,32 +89,191 @@ class RCubicScriptParser(object):
 				break
 		return retVal
 
+class RCubicGroup(object):
+	def __init__(self, name="", phase=0, version=None, autoadd=False, element=None):
+		if element is not None:
+			try:
+				version = element.attrib["version"]
+				name = element.attrib["group"]
+			except KeyError:
+				raise ConfigurationError("Element on line %i of %s is missing version or group attributes." %(element.sourceline, element.base))
 
-if __name__ == "__main__":
-	dpp12_time = '%Y-%m-%d %H:%M:%S' + str.format('{0:+06.2f}', float(time.altzone) / 3600).replace(".", "")
-	log_format = logging.Formatter('[%(asctime)s] | %(filename)s | %(process)d | %(levelname)s | %(message)s', datefmt=dpp12_time)
-	handler = logging.StreamHandler()
-	handler.setFormatter(log_format)
-	logger = logging.getLogger('')
-	logger.setLevel(logging.INFO)
-	logger.setLevel(logging.DEBUG)
-	logger.addHandler(handler)
+			try:
+				phase = RCubicScriptParser.PHASES[
+					element.attrib.get("phase", "DEFAULT").upper()
+				]
+			except:
+				raise ConfigurationError("Attribute phase on line %i of %s has unrecognized value: '%s'." %(element.sourceline, element.base, phase))
 
-	groups = [
-		RCubicGroup("mhcburstbatch"),
-		RCubicGroup("mhcburstalgo"),
-		RCubicGroup("global", phase=-1),
-		RCubicGroup("release")
-	]
-	rp = RCubicScriptParser("/home/isukhanov/vcs/release_ais/release/", groups)
-	rp.read_dirs()
-	tree = rp.init_tree()
+			fulloverride = element.attrib.get("fullOverride", "False").lower()
+			if fulloverride not in ["true", "false"]:
+				raise ConfigurationError("Element fullOverride is not (True|False) on line %i of %s." %(element.sourceline, element.base))
+			else:
+				fulloverride = fulloverride == "true"
+		else:
+			fulloverride = False
+		self.name = name
+		self.phase = phase
+		self.version = version
+		self.autoadd = autoadd
+		self.scripts = []
+		self.fulloverride = fulloverride
 
-	graph = tree.dot_graph()rborescent=True
-	graph.write_png("/tmp/foo.png")
-	graph.write_dot("/tmp/foo.dot")
+	def __str__(self):
+		return self.name
+
+	def is_success(self):
+		for script in self.scripts:
+			if not script.job.is_success():
+				return False
+
+	def is_done(self):
+		for script in self.scripts:
+			if not script.job.is_done():
+				return False
+
+	def add_script(self, rs, override=False):
+		if override:
+			logging.debug("{0} is being overriden by {1}".format(rs.name, rs.path))
+			for script in self.scripts:
+				if script.name == rs.name:
+					self.scripts.remove(script)
+					break
+		self.scripts.append(rs)
 
 
+class RCubicScriptParser(object):
+	PHASES = {"DEFAULT":0, "EARLY":-1, "LATE":1}
+	def __init__(self, groups, logdir, workdir, whitelist, blacklist, regexval, resources):
+		self.groups = groups
+		self.logdir = logdir
+		self.workdir = workdir
+		if blacklist and whitelist:
+			logging.warning("Conflicting whitelist/blacklist option. Ignoring blacklist.")
+			blacklist = []
+		elif blacklist is None:
+			blacklist = []
+		elif whitelist is None:
+			whitelist =[]
+		self.blacklist = blacklist
+		self.whitelist = whitelist
+		if regexval is not None:
+			regexval = re.compile(regexval, re.MULTILINE)
+		self.regexval = regexval
+		self.resources = resources
+		self.unusedresources = []
 
+	def scripts(self):
+		scripts = []
+		for group in self.groups:
+			for script in group.scripts:
+				scripts.append(script)
+		return scripts
 
+	def read_dirs(self, directory, override=False):
+		failed_groups = []
+		for group in self.groups:
+			groupdir = "{0}/{1}".format(directory, group)
+			logging.debug("processing group {0} {1} {2}.".format(group.name, groupdir, override))
+			if not override:
+				if not os.path.exists(groupdir):
+					failed_groups.append(group)
+					continue
+				if group.fulloverride:
+					continue
+			else:
+				if not os.path.exists(groupdir):
+					continue
+			for filename in os.listdir(groupdir):
+				filepath = "{0}/{1}".format(groupdir, filename)
+				if filename.startswith("{0}_".format(group)):
+					rs = RCubicScript(
+						filepath,
+						group.version,
+						override,
+						group.phase,
+						self.logdir,
+						self.whitelist,
+						self.blacklist,
+						self.regexval,
+						group,
+					)
+					group.add_script(rs, override)
+				else:
+					logging.debug(
+							"Skipping {0}/{1}, does not start with {2}_."
+							.format(filepath, group)
+						)
+
+	def _glob_expand(self, deps):
+		rval = []
+		for dep in deps:
+			matched = False
+			for script in self.scripts():
+				if fnmatch.fnmatchcase(script.name, dep):
+					#we return script names instead of job instances to let
+					#ExecTree handle dangling deps
+					rval.append(script.name)
+					matched = True
+			if not matched:
+				rval.append(dep)
+		return rval
+
+	def init_tree(self):
+		self.tree = exectree.ExecTree()
+		self.tree.cwd = self.workdir
+		for resource, limit in self.resources.items():
+			exectree.ExecResource(self.tree, resource, limit)
+		for script in self.scripts():
+			script.job = exectree.ExecJob(
+				script.name,
+				script.path,
+				logfile=script.logfile,
+				arguments=[script.version],
+				href="http://myspace.com/"
+			)
+			for resource in script.resources:
+				r = self.tree.find_resource(resource)
+				if r is None:
+					if resource not in self.unusedresources:
+						self.unusedresources.append(resource)
+				else:
+					script.job.resources.append(r)
+			self.tree.add_job(script.job)
+		if len(self.unusedresources) > 0:
+			logging.warning(
+				"Resources referenced but not defined: {0}."
+				.format(", ".join(self.unusedresources))
+			)
+		for script in self.scripts():
+			for dep in self._glob_expand(script.hdep):
+				d = self.tree.add_dep(dep, script.job)
+				d.color = {"defined":"deepskyblue", "undefined":"red"}
+			for dep in self._glob_expand(script.sdep):
+				try:
+					d = self.tree.add_dep(dep, script.job)
+				except exectree.JobUndefinedError:
+					dep = exectree.ExecJob(dep, "-", mustcomplete=False)
+					self.tree.add_job(dep)
+					d = self.tree.add_dep(dep, script.job)
+				d.color = {"defined":"lawngreen", "undefined":"palegreen"}
+			for cdep in self._glob_expand(script.cdep):
+				try:
+					d = self.tree.add_dep(script.job, dep)
+				except exectree.JobUndefinedError:
+					dep = self.tree.add_job(
+						exectree.ExecJob(dep, "-", mustcomplete=False)
+					)
+					d = self.tree.add_dep(script.job, dep)
+				d.color = {"defined":"lawngreen", "undefined":"palegreen"}
+			#stems = self.tree.stems()
+			for pdep in self.scripts():
+				#if pdep.phase < script.phase and pdep.job in stems:
+				if pdep.phase < script.phase:
+					d = self.tree.add_dep(pdep.job, script.job)
+					if d is None:
+						continue
+					d.color = {"defined":"gold2", "undefined":"gold2"}
+		#logging.debug("tree:\n{0}".format(etree.tostring(self.tree.xml(), pretty_print=True)))
+		return self.tree
 

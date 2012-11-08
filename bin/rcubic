@@ -27,7 +27,6 @@
 #camelCase tab indented, if unsure, read pep8 thanks
 
 #TODO
-# * in session mode append random string to dir name
 # Fix fileMode config to not use gitRepo as path and rename vars
 
 from __future__ import print_function
@@ -52,12 +51,15 @@ import fnmatch
 import uuid
 import shutil
 import simplejson
+import functools
+import traceback
 
 from email.mime.text import MIMEText
 #######
 from RCubic.RESTCommunicator import RESTCommunicator
-from RCubic.ResourceScheduler import ResourceScheduler
-from RCubic.ReleaseScript import Status, ReleaseScriptManager, ReleaseScript
+#from RCubic.ResourceScheduler import ResourceScheduler
+#from RCubic.ReleaseScript import Status, ReleaseScriptManager, ReleaseScript
+from RCubic.RCubicScript import RCubicScript, RCubicGroup, RCubicScriptParser
 from RCubic.RCubicUtilities import popenNonblock, ConfigurationError, FatalRuntimeError, LogToDB
 #######
 
@@ -91,6 +93,10 @@ class RcubicNotification(object):
 	def notifyProduct(self, products, subject, message):
 		if self.enabled:
 			self.queue.append((products, subject, message))
+		else:
+			logging.debug("Notification skipped: {0}, {1}, {2}"
+				.format(products, subject, message)
+			)
 
 	def _processMessage(self, products, subject, message):
 		msg = MIMEText(message)
@@ -118,33 +124,24 @@ class Rcubic(object):
 	def __init__(self, opts):
 		#Please don't abuse Rcubic.opts thanks!
 		self.opts = opts
-		self.toInstall = []
 		self.log = None
 		self.config = {}
 		self.port = 0
 		self.notification = RcubicNotification()
-		self.rsm = ReleaseScriptManager(self)
-		self.aisDir = ""
-		self.aisOverrideDir = ""
-		self.aisFilter = dict()
+		self.scriptDir = ""
+		self.scriptOverrideDir = ""
 		self.gitDir = ""
-		self.groupSelect = []
-		self.signalEvent = gevent.event.Event()
-		self.abortSent = False
+		self.groups = []
 		self.environment = ""
-		self.resources = { }
-		# dot's html map output is: "x,y x,y x,y"
-		# but it should be: "x,y,x,y,x,y"
-		# this is a regex to fix that
-		self.fixCoord = re.compile(' (?=[\d]*,[\d]*)')
+		self.resources = {}
 		self.gitHead = ""
 		self.token = None
-		baseConfigReq = [ "basePath", "hostListLocation", "gitRepo", "fileMode", "gerritURL", "gerritProject",
-						  "environmentOptions", "specialGroups", "specialJobs",
+		baseConfigReq = [ "basePath", "gitRepo", "fileMode", "gerritURL", "gerritProject",
+						  "environmentOptions", "specialGroups",
 						  "listenAddress", "listenPortRange", "jobExpireTime",
 						  "smtpServer", "emailSubjectPrefix", "emailFrom", "maxEmailLogSizeKB",
 						  "defaultRelease", "hijackPoint", "SSLKey", "SSLCert", "token"]
-		splitOptions = ["specialGroups", "specialJobs"]
+		splitOptions = ["specialGroups"]
 
 		#calculate path to xml relative to rcubic python, this will make symlinking tricky
 		if(self.opts.conf == None):
@@ -159,16 +156,30 @@ class Rcubic(object):
 		self._initGit()
 		self._readConfig("%s/config.xml" %(self.releaseDir), splitOptions=splitOptions)
 
-		self.resourceScheduler = ResourceScheduler(self.resources)
-
-		self.rsm.specialJobs = self.config["specialJobs"]
-
 		self._initNotification()
 
 		if self.opts.sessionMode:
 			self.log = LogToDB(":memory:")
 		else:
 			self.log = LogToDB(self.config["auditLog"])
+
+		self.groups =  self.groupSelect()
+		self.rsp = RCubicScriptParser(
+			self.groups,
+			self.logDir,
+			self.releaseDir,
+			self._flattenOption(self.opts.whitelist),
+			self._flattenOption(self.opts.blacklist),
+			self.config.get("scriptregex", None),
+			self.resources,
+		)
+		self.rsp.read_dirs(self.scriptDir)
+		self.rsp.read_dirs(self.scriptOverrideDir, True)
+		self.tree = self.rsp.init_tree()
+		for script in self.rsp.scripts():
+			for e in script.job.DONE_STATES:
+				handler = functools.partial(self.statusEventHandler, script)
+				script.job.events[e].rawlink(handler)
 
 		try:
 			self._validate()
@@ -180,43 +191,66 @@ class Rcubic(object):
 			self.cleanup()
 
 	def _validate(self):
+		"""Proccess most severe errors first, raising them. those
+		which are not immediatelly fatal get appended to errors
+		and raised all at once."""
+		errors = []
+
+
+		for group in self.groups:
+			if group.autoadd == False:
+				break
+		if group.autoadd != False:
+			raise ConfigurationError("ERROR: No groups selected for installation")
+
+		egroups = []
+		for group in self.groups:
+			if len(group.scripts) <= 0:
+				egroups.append(group.name)
+		if len(egroups) > 0:
+			errors.append(
+				"Group(s) %s have no scripts associated with them." %
+				(" ".join(egroups))
+			)
+
 		if self._readNotificationConfig() <= 0:
-			raise ConfigurationError("No notification configured. This is a bad thing")
+			errors.append(
+				"No notification configured. This is a bad thing"
+			)
 
-		#TODO validate aisOverrideDir and aisDir (do they exist?)
-		self._selectWhatToInstall()
-
-		if self.rsm.countGroups(self.config["specialGroups"]) <= 0:
-			raise ConfigurationError("ERROR: nothing to install")
-
-		if not self._verifyBasePath():
-			raise ConfigurationError("ERROR: basePath missmatch")
-
-		self.rsm.expandglobs()
-		self.rsm.convertcdep()
-		self.rsm.inferParents()
-		self.rsm.gparentCompile()
+		for rs in self.rsp.scripts():
+			if not rs.regexval:
+				errors.append(
+					"Script {0} does not pass the regex check ({1})"
+					.format(rs.name, self.config.get("scriptregex", ""))
+				)
 
 		if self.opts.environment:
 			self.environment = self.opts.environment
 		elif "environment" in self.config:
 			self.environment = self.config["environment"]
 		else:
-			raise ConfigurationError("Environment not not specified.")
+			errors.append("Environment not not specified.")
 
 		self._updateGraph(updateDot=True)
 
+		errors.extend(self.tree.validate())
+
 		valid = self.validate()
 		if valid != True:
-			logging.error("Validation failure:\n%s" %(valid))
-			raise ConfigurationError("Encountered Validation error. See above for cause of failure.")
+			errors.append(valid)
 
 		if self.environment not in self.config["environmentOptions"]:
-			logging.error("environmentOptions: %s" %self.config["environmentOptions"])
-			raise ConfigurationError("Invalid environment specified")
+			errors.append("environmentOptions: %s" %self.config["environmentOptions"])
 
 		if not self._verifyNotificationGroups():
-			raise ConfigurationError("No notification configured. This is a bad thing")
+			errors.append("No notification configured. This is a bad thing")
+
+		if len(errors) > 0:
+			logging.error("Errors detected")
+			for error in errors:
+				logging.error(error)
+			raise ConfigurationError("Errors:\n {0}".format("\n".join(errors)))
 
 	def _initNotification(self):
 		self.notification.emailFrom = self.config["emailFrom"]
@@ -300,52 +334,26 @@ class Rcubic(object):
 
 	def _flattenOption(self, inList):
 		outList = []
+		if inList is None:
+			return outList
 		s = re.compile("[;,\s]+")
 		for subList in inList:
 			outList.extend(s.split(subList))
 		return outList
 
-	def _populateAISFilter(self):
-		self.aisFilter = dict()
-
-		if self.opts.ais and self.opts.skipAis:
-			logging.info("conflicting options selected skip and select ais. Will honnor only select.")
-
-		if self.opts.ais:
-			self.aisFilter["positiveFilter"] = True
-			self.aisFilter["files"] = self._flattenOption(self.opts.ais)
-			self.aisFilter["files"].extend(self.config["specialJobs"])
-		elif self.opts.skipAis:
-			self.aisFilter["positiveFilter"] = False
-			self.aisFilter["files"] = self._flattenOption(self.opts.skipAis)
-
-	def _aisHijack(self):
-		for rs in self.rsm:
-			if rs.group not in self.config["specialGroups"]:
-				rs.hijack(self.config["hijackPoint"])
-
-	def _selectGroups(self):
-		if self.opts.group is not None:
-			self.groupSelect = self._flattenOption(self.opts.group)
-			self.groupSelect.extend(self.config["specialGroups"])
-
 	def _initPaths(self):
 		self.originalBasePath = self.config["basePath"]
 		self.config["archivePath"] = "%s/archive/" % (self.config["basePath"])
 		if self.opts.sessionMode:
-			if self.groupSelect != []:
-				groupDirString = self.groupSelect[0] #TODO properly implement 'group'.
-			else:
-				groupDirString = "all"
-			self.config["basePath"] = "%s/%s_%s" %(self.config["basePath"], uuid.uuid1(), groupDirString)
+			self.config["basePath"] = "%s/%s" %(self.config["basePath"], uuid.uuid1())
 
 		self.logDir = "%s/work/log" % self.config["basePath"]
 		self.gitDir = "%s/work/git" % self.config["basePath"]
 		if self.opts.release:
 			self.config["defaultRelease"] = self.opts.release
 		self.releaseDir = "%s/%s" % (self.gitDir, self.config["defaultRelease"])
-		self.aisOverrideDir = "%s/override" % self.releaseDir
-		self.aisDir = "%s/release" % self.gitDir
+		self.scriptOverrideDir = "%s/override" % self.releaseDir
+		self.scriptDir = "%s/release" % self.gitDir
 		self.validationDir = "%s/validation" % self.gitDir
 
 		if "baseURL" in self.config:
@@ -438,65 +446,40 @@ class Rcubic(object):
 
 		return True
 
-	def _selectWhatToInstall(self):
-		self._selectGroups()
-		self._populateAISFilter()
-		toInstallGroups=[]
+	def groupSelect(self):
+		"""
+		What groups do we need to select for execution?
+		"""
+		groups = []
+		groupselect = self._flattenOption(self.opts.group)
 
 		for element in self.etree.xpath("/rcubic/release/install"):
-			try:
-				version = element.attrib["version"]
-				group = element.attrib["group"]
-			except KeyError:
-				raise ConfigurationError("Element on line %i of %s is missing an attribute." %(element.sourceline, element.base))
-
-			phase = ReleaseScript.Phase.DEFAULT
-			if "phase" in element.attrib:
-				phase = element.attrib["phase"].upper()
-				if not phase in ReleaseScript.Phase.all:
-					raise ConfigurationError("Attribute phase on line %i of %s has unrecognized value: '%s'." %(element.sourceline, element.base, phase))
-
-			try:
-				fullOverride = element.attrib["fullOverride"]
-				if fullOverride.lower() == "true":
-					fullOverride = True
-				elif fullOverride.lower() == "false":
-					fullOverride = False
+			rg = RCubicGroup(element=element)
+			if rg.name in self.config["specialGroups"]:
+				rg.autoadd = True
+				groups.append(rg)
+			elif rg.name in groupselect:
+				groups.append(rg)
+			elif len(groupselect) == 0:
+				if self.log.isNewestVersion(rg.name, rg.version):
+					groups.append(rg)
 				else:
-					raise ConfigurationError("Element fullOverride is not (True|False) on line %i of %s." %(element.sourceline, element.base))
-			except KeyError:
-				fullOverride = False
+					logging.info(
+						"Skipping %s a version greater than or equal %s is installed." %
+						(group, version)
+					)
 
-			toInstall = False
-			if group in self.config["specialGroups"]:
-				toInstall = True
-			if self.groupSelect:
-				if group in self.groupSelect:
-					toInstall = True
-			else:
-				if self.log.isNewestVersion(group, version):
-					toInstall = True
-				else:
-					logging.info("Skipping %s a version greater than or equal %s is installed." %(group, version))
+		for gs in groupselect:
+			for g in groups:
+				if gs == g:
+					break
+			if gs != g.name:
+				raise ConfigurationError("Group %s is not in the configuration(%s)." %(gs, g.name))
 
-			installed = 0
-			if toInstall:
-				toInstallGroups.append(group)
-				if not fullOverride:
-					installed += self.rsm.addGroup(self.aisDir, group, version, phase, self.aisFilter)
-				installed += self.rsm.addGroup(self.aisOverrideDir, group, version, phase, self.aisFilter)
-				if installed <= 0:
-					raise ConfigurationError("No matching install scripts found for group: %s." %(group))
-
-		for g in self.groupSelect:
-			if not g in toInstallGroups:
-				raise ConfigurationError("Group %s is not in the configuration" % g)
-		logging.info("Installing groups %s." % " ".join(sorted(toInstallGroups)))
-
-		if self.aisFilter:
-			self._aisHijack()
-
-		return True
+		logging.info("Installing groups %s." %
+			" ".join(sorted([group.name for group in groups]))
+		)
+		return groups
 
 	def _readNotificationConfig(self):
 		count = 0
@@ -511,34 +494,27 @@ class Rcubic(object):
 
 	def _verifyNotificationGroups(self):
 		exit = True
-		for rs in self.rsm:
+		for rs in self.rsp.scripts():
 			for product in rs.products:
 				if not self.notification.isProductConfigured(product):
 					exit = False
 					logging.error("'%s' references notification group '%s' which is not defined" %(rs.script, product))
 		return exit
 
-	def _verifyBasePath(self):
-		for rs in self.rsm:
-			if not rs.script.startswith(self.config["basePath"]):
-				return False
-		return True
-
 	def reschedule(self, scriptName):
-		response = self.rsm.find(scriptName)
-		if not response:
+		job = self.tree.find_job(scriptName)
+		if job is None:
 			return False
-		gevent.spawn(response.queue)
-		return True
+		job.reset()
+		return job.start()
 
 	def manualOverride(self, scriptName):
-		response = self.rsm.find(scriptName)
-		if not response:
-			print("No such script")
+		job = self.tree.find_job(scriptName)
+		if job is None:
 			return False
-		response.status = Status.MANUALOVERRIDE
-		self.refreshStatus(response)
-		response.event.set()
+		if job.state not in job.ERROR_STATES:
+			return False
+		job.state = job.STATE_SUCCESSFULL
 		return True
 
 	def validate(self):
@@ -547,7 +523,7 @@ class Rcubic(object):
 		#Validate and run validation scripts
 		if self.opts.strictValidation:
 			if os.path.exists(self.validationDir):
-				arguments = [ self.environment, self.opts.release, " ".join(self.rsm.groups) ]
+				arguments = [ self.environment, self.opts.release, " ".join(self.groups)]
 				prependRe = re.compile("^", re.M)
 				for validationScript in os.listdir(self.validationDir):
 					validationScript = "%s/%s" %(self.validationDir, validationScript)
@@ -575,40 +551,13 @@ class Rcubic(object):
 							errorMessages += prependRe.sub("\t\t\t", stderr.strip(), 0)
 							errorMessages += "\n"
 
-		rsmErrorMessages = self.rsm.validate()
-		if rsmErrorMessages != True:
-			errorMessages += rsmErrorMessages
-
 		if errorMessages == "":
 			return True
 		else:
 			return errorMessages
 
 	def _updateGraph(self, updateDot=False):
-		logging.debug("Update graph called")
-		try:
-			meta = [
-					#fullpng takes too long to render
-					#(self.config["fdotFile"], self.config["fpngFile"], self.config["fhtmlFile"], False),
-					(self.config["adotFile"], self.config["asvgFile"], self.config["njsonFile"], True)
-				   ]
-			for df, sf, jn, t in meta:
-				if updateDot:
-					with open(df, "w") as dotFD:
-						dotFD.write(self.rsm.toDot(self.config["baseURL"], len(self.gitDir), t))
-					with open(sf, "w") as svgFD:
-						processResult = popenNonblock(["dot", "-Tsvg", df])
-						# Regex fix the coordinate space comma issue (look at fixCoord definition)
-						svgFD.write(self.fixCoord.sub(',', processResult[1]))
-					if processResult[0] != 0:
-						return False
-				with open(jn, "w") as jsonFD:
-					jsonFD.write(self.rsm.toJSON(t))
-
-			return True
-		except OSError:
-			raise FatalRuntimeError("ERROR: graphviz not installed.")
-			return False
+		self.tree.write_status(self.config["asvgFile"], self.config["njsonFile"], updateDot)
 
 	def _updateProgress(self, scriptName, version, kind, message):
 		rs = self.rsm.find(scriptName)
@@ -622,73 +571,34 @@ class Rcubic(object):
 			if not rs.updateProgress(message):
 				logging.error("received message with invalid progress message. (%s, %s, %s)" %(scriptName, version, message))
 				return False
-			self.signalEvent.set()
 		else:
 			logging.error("received message with unknown message type (%s)." %(kind))
 			return False
 		return True
 
-	def refreshStatus(self, rs):
-		self.signalEvent.set()
+	def statusEventHandler(self, rs, event):
+		self.log.saveStatus(rs.group.name, rs.version, rs.job.state, self.gitHead, rs.job.name)
+		if rs.job.is_done() and rs.group.is_success():
+			self.log.saveStatus(rs.group.name, rs.version, rs.job.state, self.gitHead)
 
-		self.log.saveStatus(rs.group, rs.version, rs.status, self.gitHead, rs.name)
-		if rs.isDone() and self.rsm.isGroupSuccess(rs.group):
-			self.log.saveStatus(rs.group, rs.version, rs.status, self.gitHead)
-			pass
+		if self.opts.sessionMode and rs.job.is_failed():
+			self.tree.cancel()
 
-		if self.opts.sessionMode and rs.isFailed:
-			self.abort()
-
-		if rs.isFailed:
-			# Get last 'maxEmailLogSizeKB' kilobytes of log for email.
-			try:
-				logFile=open("%s/work/log/%s.log" %((self.manager.rcubic.config["basePath"], self.name)), 'r')
-				logFile.seek(0,2)
-				logSize = logFile.tell()
-				logFile.seek(max(-1024 * self.config['maxEmailLogSizeKB'], -logSize), 2)
-				logContent = logFile.read()
-			except:
-				logContent="ERROR opening log file!"
-			self.notification.notifyProduct(rs.products, "%s (%s) failed" %(rs.name, rs.version), logContent)
-		elif rs.hasFailed and rs.isSuccess():
-			self.notification.notifyProduct(rs.products, "%s (%s) recovered" %(rs.name, rs.version), "The script %s which has previously failed has now succeeded." % rs.name)
+		if rs.job.is_failed():
+			self.notification.notifyProduct(
+				rs.products,
+				"%s (%s) failed" %(rs.name, rs.version),
+				rs.job.read_log(1024 * int(self.config['maxEmailLogSizeKB']))
+			)
+		elif rs.job.execcount > 1 and rs.isSuccess():
+			self.notification.notifyProduct(
+				rs.products,
+				"%s (%s) recovered" %(rs.name, rs.version),
+				"The script %s which has previously failed has now succeeded." % rs.name
+			)
 
 	def abort(self, signum=None, frame=None):
-		#TODO: remove this and just call the RSM one
-		#signum and frame are needed as they are passed up from threading class.
-		if self.abortSent:
-			logging.error("Abort already sent to all jobs.")
-			logging.debug("jobs: %s" % self.rsm)
-			return
-		else:
-			self.abortSent = True
-
-		logging.info("Aborting all jobs. Please be patient.")
-		self.rsm.abortJobs()
-
-	def processEvents(self):
-		#We sleep here to give socket server some time to init
-		#TODO: use event set in communicator to let us know that its ready
-		gevent.sleep(1)
-
-		expireTime = time.time() + 3600 * self.config["jobExpireTime"]
-		while self.communicator.started():
-				self.signalEvent.wait(10.0)
-				if self.signalEvent.is_set():
-					self.signalEvent.clear()
-					self._updateGraph()
-					self.notification.processQueue()
-				if self.opts.sessionMode or self.abortSent:
-					if self.rsm.isDone():
-						break
-				else:
-					if self.rsm.isSuccess():
-						break
-				if time.time() > expireTime:
-					logging.error("Tired of waiting for jobs to exit. Aborting.")
-					self.abort()
-					break
-		self.communicator.stop()
+		self.tree.cancel()
 
 	def cleanup(self):
 		try:
@@ -696,28 +606,24 @@ class Rcubic(object):
 				uid = uuid.uuid1()
 				archiveDir = "%s/%s" % (self.config["archivePath"], uid)
 				os.makedirs(archiveDir)
-				files = [ self.config['adotFile'], self.config['asvgFile'], self.config['njsonFile'] ]
+				files = [ self.config['asvgFile'], self.config['njsonFile'] ]
 				if not self.opts.foreground and not self.opts.validate:
 					files.append(self.config['logFile'])
 				for f in files:
 					shutil.copy(f, archiveDir)
-				if(not self.opts.validate):
+				if not self.opts.validate:
 					shutil.copytree("%s/%s" % (self.config["basePath"], "work/log"), "%s/%s" % (archiveDir,"log"))
 				logging.info("Copied files to: %s" % (archiveDir))
 
 				archiveURL = "%s?prefix=%s/archive/%s" %(self.baseURL, self.pathURL, uid)
 				logging.info("Job archive available at: %s" % (archiveURL))
-				job_log = open("%s/%s" % (self.config["archivePath"], "jobs.txt"), "a")
-				job_log.write("%s,%s,%s,%s\n" % (time.strftime("%m/%d/%y - %H:%M"), '1.0', ','.join(self.rsm.groups), uid))
-				job_log.close()
-
 		except:
 			logging.error("Something went wrong while trying to copy files to archive: %s" % (str(sys.exc_info())))
 
 		if self.opts.sessionMode:
 			try:
 				shutil.rmtree("%s/%s" % (self.config["basePath"], "work/git"))
-				logging.info("Removed git directory from session folder.")
+				logging.debug("Removed git directory from session folder.")
 			except:
 				logging.error("Something went wrong when trying to remove git directory from session folder: %s" % (str(sys.exc_info())))
 
@@ -750,26 +656,25 @@ class Rcubic(object):
 			self.config["token"] = None
 
 		self.communicator = RESTCommunicator(self, bind=self.config["listenAddress"], portRange=self.config["listenPortRange"], SSLKey=self.config["SSLKey"], SSLCert=self.config["SSLCert"], token=self.config["token"])
-		rse = self.rsm.queueJobs() #release script event
-
-		jobs = [gevent.spawn(rsei) for rsei in rse]
-		jobs.extend([gevent.spawn(self.processEvents)])
-		# Starts non-blocking so we can get port
+		# Start communicator now so we can get port
 		self.communicator.start(block=False)
 		logging.info("Server started at %s:%s" % (self.communicator.bind, self.communicator.port))
 		self.token = self.communicator.token
 		self.port = self.communicator.port
-		gevent.joinall(jobs)
-		time.sleep(5)
+
+		self.tree.extend_args([self.environment, `self.port`, `self.port`])
+		self.tree.spawn_json_updater(self.config["njsonFile"])
+		self.tree.run(timeout=self.config["jobExpireTime"]*60*60)
 		self._updateGraph(updateDot=True)
 		self.notification.processQueue()
+		self.communicator.stop()
 
 		self.cleanup()
 
-		if not self.rsm.isDone():
+		if not self.tree.is_done():
 			logging.error("exited with orphaned jobs")
 			return False
-		return self.rsm.isSuccess()
+		return self.tree.is_success()
 
 class RcubicDaemon(Daemon):
 	def setRcubic(self,rcubic):
@@ -777,35 +682,45 @@ class RcubicDaemon(Daemon):
 	def run(self):
 		self.rcubic.run()
 
-def _setupLogging():
+def _setupLogging(debug=False):
 	dpp12_time = '%Y-%m-%d %H:%M:%S' + str.format('{0:+06.2f}', float(time.altzone) / 3600).replace(".", "")
-	log_format = logging.Formatter('[%(asctime)s] | %(filename)s | %(process)d | %(levelname)s | %(message)s', datefmt=dpp12_time)
+	if not debug:
+		log_format = logging.Formatter('[%(asctime)s] | %(filename)s | %(process)d | %(levelname)s | %(message)s', datefmt=dpp12_time)
+	else:
+		log_format = logging.Formatter('[%(asctime)s] | %(filename)s:%(lineno)d | %(process)d | %(levelname)s | %(message)s', datefmt=dpp12_time)
 	handler = logging.StreamHandler()
 	handler.setFormatter(log_format)
 	logger = logging.getLogger('')
-	logger.setLevel(logging.INFO)
-	#logger.setLevel(logging.DEBUG)
+	if not debug:
+		logger.setLevel(logging.INFO)
+	else:
+		logger.setLevel(logging.DEBUG)
 	logger.addHandler(handler)
 
+def _stack_trace(signum, frame):
+	traceback.print_stack()
+
 if __name__ == "__main__":
-	_setupLogging()
 	argParser = argparse.ArgumentParser(description='Rcubic does stuff! Important stuff!')
 	argParser.add_argument('-r', dest='release', metavar='release_directory', required=False, help='Release. Number.')
-	argParser.add_argument('-g', dest='group', metavar='group', action='append',
+	argParser.add_argument('-g', dest='group', metavar='group', action='append', default=[],
 							help='Select Group to run. Can be specified multiple times for multiple groups.')
 	argParser.add_argument('-v', dest='validate', action='store_const', const=True, default=False, help='Validate configuration.')
 	argParser.add_argument('-V', '--extval', '--strictValidation', dest='strictValidation', action='store_const', const=True, default=False, help='Strict validation configuration. Run validation scripts.')
 	argParser.add_argument('-f', dest='foreground', action='store_const', const=True, default=False,  help='Run in foreground (debug) mode.')
 	argParser.add_argument('-s', dest='sessionMode', action='store_const', const=True, default=False,  help='Run in Session mode.')
-	argParser.add_argument('-a', dest='ais', metavar='ais_list', action='append', default=None,
-							help='Select a single AIS to run. Can be specified multiple times for multiple AIS. Do not use with -i.')
-	argParser.add_argument('-A', dest='skipAis', metavar='ais_list', action='append', default=None,
-							help='Select an AIS to skip. Can be specified multiple times for multiple AIS. Do not use with -a.')
+	argParser.add_argument('-a', dest='whitelist', action='append', default=None,
+							help='Exchaustive white list of scripts to run. Comma separated or pass in multiple flags. Conflicts with -A')
+	argParser.add_argument('-A', dest='blacklist', action='append', default=None,
+							help='Black list of script to not add to tree. Comma separated or pass in multiple flags. Conflicts with -a')
 	argParser.add_argument('--refspec', dest='refspec', metavar='refspec', default=None,  help='refspec to fetch from, sets branch to FETCH_HEAD.')
 	argParser.add_argument('-b', dest='branch', metavar='branch', default=None, help='branch to checkout defaults to master unless --refspec is specified')
 	argParser.add_argument('-e', dest='environment', metavar='environmet', required=False, help='Environment options.')
 	argParser.add_argument('-c','--config', dest='conf', default=None, help='path to rcubic.xml config file. Default RCubic.run directory')
+	argParser.add_argument('-D','--debug', dest='debug', action='store_const', const=True, default=False, help='Log in debug level.')
 	opts = argParser.parse_args()
+
+	_setupLogging(opts.debug)
 
 	try:
 		rcubic = Rcubic(opts)
@@ -820,6 +735,7 @@ if __name__ == "__main__":
 
 	signal.signal(signal.SIGTERM, rcubic.abort)
 	signal.signal(signal.SIGINT, rcubic.abort)
+	signal.signal(signal.SIGQUIT, _stack_trace)
 
 	if opts.foreground:
 		if rcubic.run():
