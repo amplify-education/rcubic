@@ -216,14 +216,13 @@ class ExecJob(object):
 			label = "{0}\n{1}".format(self.name, self.progress)
 		else:
 			label = self.name
-		node = pydot.Node(
-			label,
-			style = "filled",
-			fillcolor = self.STATE_COLORS[self.state]
-			)
+		kw = {
+			"style" : "filled",
+			"fillcolor" : self.STATE_COLORS[self.state]
+			}
 		if self.href:
-			#node.set_labelhref(self.name)
-			node.set_href(self.href)
+			kw["href"] = "\"{0}\"".format(self.href)
+		node = pydot.Node(label, **kw)
 		return node
 
 	def _dot_tree(self):
