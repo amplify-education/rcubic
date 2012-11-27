@@ -10,6 +10,7 @@ RCubic/RCubicUtilities.py
 RCubic/ReleaseScript.py
 RCubic/ResourceScheduler.py
 RCubic/RESTCommunicator.py
+RCubic/daemon.py
 RCubic/ScriptStatus.py
 RCubic/__init__.py
 RCubic/rcubic.xml.template
