@@ -27,6 +27,7 @@ import re
 import fnmatch
 from exectree import exectree
 from lxml import etree
+import subprocess
 
 
 class RCubicScript(object):
@@ -34,18 +35,20 @@ class RCubicScript(object):
 		self.path = filepath
 		self.name = filepath.split("/")[-1]
 		self.version = version
-		self.overrider = override
+		self.override = override
 		self.logfile = "{0}/{1}".format(logdir, self.name)
 
 		with open(self.path) as fd:
 			script = fd.read()
-		self.hdep = self._get_header_field(script, "HDEP")
-		self.sdep = self._get_header_field(script, "SDEP")
-		self.cdep = self._get_header_field(script, "CDEP")
-		self.resources = self._get_header_field(script, "RESOURCES")
+		self.hdep = self._param_split(self._get_param(script, "HDEP"))
+		self.sdep = self._param_split(self._get_param(script, "SDEP"))
+		self.cdep = self._param_split(self._get_param(script, "CDEP"))
+		self.idep = self._get_param(script, "IDEP", None)
+		self.iterator = self._param_split(self._get_param(script, "ITER"))
+		self.resources = self._param_split(self._get_param(script, "RESOURCES"))
 		self.resources.append("default")
-		self.products = self._get_header_field(script, "PRODUCT")
-		sphase = self._get_header_field(script, "PHASE")
+		self.products = self._param_split(self._get_param(script, "PRODUCT"))
+		sphase = self._param_split(self._get_param(script, "PHASE"))
 		self.group = group
 		if regexval is None:
 			self.regexval = True
@@ -62,20 +65,22 @@ class RCubicScript(object):
 		elif len(whitelist) > 0 and name not in whitelist:
 			self.path="-"
 
-	def _get_header_field(self, script, field):
+	def _get_param(self, script, field, default=None):
 		fieldre = re.compile("^[\s]*#%s:.*$" %(field), re.MULTILINE)
+		begin = re.compile("^#[A-Z0-9]+:[\s]*")
 		line = fieldre.search(script)
-		val = []
 		if line:
-			line = line.group(0)
-			begin = re.compile("^#[A-Z0-9]+:[\s]*")
+			return begin.sub("", line.group(0), 1)
+		else:
+			return default
+
+	def _param_split(self, param):
+		val = []
+		if param is not None:
 			seperator = re.compile("[,;\s]+")
-			val = seperator.split(begin.sub("", line, 1))
-			while True:
-				try:
-					val.remove("")
-				except ValueError:
-					break
+			val = seperator.split(param)
+			while "" in val:
+				val.remove("")
 		return val
 
 	def _parseHeaderLine(self, line):
@@ -96,18 +101,27 @@ class RCubicGroup(object):
 				version = element.attrib["version"]
 				name = element.attrib["group"]
 			except KeyError:
-				raise ConfigurationError("Element on line %i of %s is missing version or group attributes." %(element.sourceline, element.base))
+				raise ConfigurationError(
+					"Element on line %i of %s is missing version or group attributes."
+					%(element.sourceline, element.base)
+				)
 
 			try:
 				phase = RCubicScriptParser.PHASES[
 					element.attrib.get("phase", "DEFAULT").upper()
 				]
 			except:
-				raise ConfigurationError("Attribute phase on line %i of %s has unrecognized value: '%s'." %(element.sourceline, element.base, phase))
+				raise ConfigurationError(
+					"Attribute phase on line %i of %s has unrecognized value: '%s'."
+					%(element.sourceline, element.base, phase)
+				)
 
 			fulloverride = element.attrib.get("fullOverride", "False").lower()
 			if fulloverride not in ["true", "false"]:
-				raise ConfigurationError("Element fullOverride is not (True|False) on line %i of %s." %(element.sourceline, element.base))
+				raise ConfigurationError(
+					"Element fullOverride is not (True|False) on line %i of %s."
+					%(element.sourceline, element.base)
+				)
 			else:
 				fulloverride = fulloverride == "true"
 		else:
@@ -162,6 +176,8 @@ class RCubicScriptParser(object):
 		self.regexval = regexval
 		self.resources = resources
 		self.unusedresources = []
+		self.tree = None
+		self.subtrees = {}
 
 	def scripts(self):
 		scripts = []
@@ -219,11 +235,39 @@ class RCubicScriptParser(object):
 				rval.append(dep)
 		return rval
 
+	def eval_args(self, script):
+		logging.debug("iterator: {0}, cwd: {1}".format(script.iterator, self.workdir))
+		with open("/dev/null", "w") as devnull:
+			output = subprocess.check_output(script.iterator, stderr=devnull, cwd=self.workdir)
+		seperator = re.compile("[,;\s]+")
+		args = seperator.split(output)
+		while "" in args:
+			args.remove("")
+		logging.debug("Arguments {0}".format(args))
+		return args
+
+
 	def init_tree(self):
 		self.tree = exectree.ExecTree()
 		self.tree.cwd = self.workdir
+
+		#Initialize all sub trees
+		for script in self.scripts():
+			if len(script.iterator) > 0:
+				tree = exectree.ExecTree()
+				tree.cwd = self.workdir
+				tree.name = script.name
+				tree.iterator = exectree.ExecIter(
+					"{0}_iter".format(script.name),
+					self.eval_args(script)
+				)
+				self.subtrees[script.name] = tree
+
+		#Initialize Resources
 		for resource, limit in self.resources.items():
 			exectree.ExecResource(self.tree, resource, limit)
+
+		#Initialize jobs and add to trees
 		for script in self.scripts():
 			script.job = exectree.ExecJob(
 				script.name,
@@ -232,6 +276,11 @@ class RCubicScriptParser(object):
 				arguments=[script.version],
 				href="http://myspace.com/"
 			)
+			if script.name in self.subtrees:
+				script.job.jobpath = None
+				script.job.subtree = self.subtrees[script.name]
+			if script.override:
+				script.job.tcolor = "deepskyblue"
 			for resource in script.resources:
 				r = self.tree.find_resource(resource)
 				if r is None:
@@ -239,38 +288,51 @@ class RCubicScriptParser(object):
 						self.unusedresources.append(resource)
 				else:
 					script.job.resources.append(r)
-			self.tree.add_job(script.job)
+			if script.idep is None:
+				self.tree.add_job(script.job)
+			else:
+				#todo handle exception nicely
+				self.subtrees[script.idep].add_job(script.job)
+		#Check for undefined resources
 		if len(self.unusedresources) > 0:
 			logging.warning(
 				"Resources referenced but not defined: {0}."
 				.format(", ".join(self.unusedresources))
 			)
+
+		#Initialize and set up dependencies
 		for script in self.scripts():
+			logging.debug("proccessing script: {0}".format(script.name))
+			if script.idep is None:
+				tree = self.tree
+			else:
+				tree = self.subtrees[script.idep]
+
 			for dep in self._glob_expand(script.hdep):
-				d = self.tree.add_dep(dep, script.job)
+				d = tree.add_dep(dep, script.job)
 				d.color = {"defined":"deepskyblue", "undefined":"red"}
 			for dep in self._glob_expand(script.sdep):
 				try:
-					d = self.tree.add_dep(dep, script.job)
+					d = tree.add_dep(dep, script.job)
 				except exectree.JobUndefinedError:
 					dep = exectree.ExecJob(dep, "-", mustcomplete=False)
-					self.tree.add_job(dep)
-					d = self.tree.add_dep(dep, script.job)
+					tree.add_job(dep)
+					d = tree.add_dep(dep, script.job)
 				d.color = {"defined":"lawngreen", "undefined":"palegreen"}
 			for cdep in self._glob_expand(script.cdep):
 				try:
-					d = self.tree.add_dep(script.job, dep)
+					d = tree.add_dep(script.job, dep)
 				except exectree.JobUndefinedError:
-					dep = self.tree.add_job(
+					dep = tree.add_job(
 						exectree.ExecJob(dep, "-", mustcomplete=False)
 					)
-					d = self.tree.add_dep(script.job, dep)
+					d = tree.add_dep(script.job, dep)
 				d.color = {"defined":"lawngreen", "undefined":"palegreen"}
 			#stems = self.tree.stems()
 			for pdep in self.scripts():
 				#if pdep.phase < script.phase and pdep.job in stems:
-				if pdep.phase < script.phase:
-					d = self.tree.add_dep(pdep.job, script.job)
+				if pdep.phase < script.phase and pdep.idep is None and script.idep is None:
+					d = tree.add_dep(pdep.job, script.job)
 					if d is None:
 						continue
 					d.color = {"defined":"gold2", "undefined":"gold2"}

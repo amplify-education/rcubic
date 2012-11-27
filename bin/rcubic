@@ -498,7 +498,7 @@ class Rcubic(object):
 			for product in rs.products:
 				if not self.notification.isProductConfigured(product):
 					exit = False
-					logging.error("'%s' references notification group '%s' which is not defined" %(rs.script, product))
+					logging.error("'%s' references notification group '%s' which is not defined" %(rs.name, product))
 		return exit
 
 	def reschedule(self, scriptName):
@@ -590,7 +590,7 @@ class Rcubic(object):
 				"%s (%s) failed" %(rs.name, rs.version),
 				rs.job.read_log(1024 * int(self.config['maxEmailLogSizeKB']))
 			)
-		elif rs.job.execcount > 1 and rs.isSuccess():
+		elif rs.job.failcount > 1 and rs.job.is_success():
 			self.notification.notifyProduct(
 				rs.products,
 				"%s (%s) recovered" %(rs.name, rs.version),
