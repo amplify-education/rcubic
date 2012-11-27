@@ -59,10 +59,10 @@ from RCubic.RESTCommunicator import RESTCommunicator
 from RCubic.ResourceScheduler import ResourceScheduler
 from RCubic.ReleaseScript import Status, ReleaseScriptManager, ReleaseScript
 from RCubic.RCubicUtilities import popenNonblock, ConfigurationError, FatalRuntimeError, LogToDB
+from RCubic.daemon import Daemon
 #######
 
 #third party libraries:
-from daemon import Daemon
 from lxml import etree
 import gevent
 from gevent import (event, server, socket)
