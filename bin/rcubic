@@ -61,10 +61,10 @@ from RCubic.RESTCommunicator import RESTCommunicator
 #from RCubic.ReleaseScript import Status, ReleaseScriptManager, ReleaseScript
 from RCubic.RCubicScript import RCubicScript, RCubicGroup, RCubicScriptParser
 from RCubic.RCubicUtilities import popenNonblock, ConfigurationError, FatalRuntimeError, LogToDB
+from RCubic.daemon import Daemon
 #######
 
 #third party libraries:
-from daemon import Daemon
 from lxml import etree
 import gevent
 from gevent import (event, server, socket)
@@ -143,11 +143,14 @@ class Rcubic(object):
 						  "defaultRelease", "hijackPoint", "SSLKey", "SSLCert", "token"]
 		splitOptions = ["specialGroups"]
 
-		#calculate path to xml relative to rcubic python, this will make symlinking tricky
-		if(self.opts.conf == None):
-			xmlpath = "%s/rcubic.xml" % sys.argv[0][0:sys.argv[0].rindex("/")]
-		else:
-			xmlpath = self.opts.conf
+		configpaths = [ sys.argv[0][0:sys.argv[0].rindex("/")],
+						os.path.expanduser("~/.rcubic"),
+						os.environ.get("RCUBIC_CONF"),
+						"/etc/rcubic"]
+		for path in configpaths:
+			xmlpath = "%s/rcubic.xml" % path
+			if os.path.exists(xmlpath):
+				break
 
 		self._readConfig(xmlpath, baseConfigReq, splitOptions=splitOptions)
 		self.config["gitRepo"] = [self.config["gitRepo"]]
@@ -716,7 +719,6 @@ if __name__ == "__main__":
 	argParser.add_argument('--refspec', dest='refspec', metavar='refspec', default=None,  help='refspec to fetch from, sets branch to FETCH_HEAD.')
 	argParser.add_argument('-b', dest='branch', metavar='branch', default=None, help='branch to checkout defaults to master unless --refspec is specified')
 	argParser.add_argument('-e', dest='environment', metavar='environmet', required=False, help='Environment options.')
-	argParser.add_argument('-c','--config', dest='conf', default=None, help='path to rcubic.xml config file. Default RCubic.run directory')
 	argParser.add_argument('-D','--debug', dest='debug', action='store_const', const=True, default=False, help='Log in debug level.')
 	opts = argParser.parse_args()
 
