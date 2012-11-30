@@ -246,7 +246,7 @@ class TestET(unittest.TestCase):
 		job4 = self._newjob("war", self.tree, exitcode=1, maxsleep=0)
 		job4.mustcomplete = False
 
-		job5 = self._newjob("wex", self.tree, maxsleep=0)
+		job5 = self._newjob("wex", self.tree, maxsleep=2)
 		job5.mustcomplete = False
 
 		job6 = self._newjob("wop", self.tree, maxsleep=0)
@@ -295,8 +295,10 @@ class TestET(unittest.TestCase):
 		with gevent.Timeout(30):
 			runreturn = self.tree.run()
 
+		self.assertTrue(self.ljob1_count == len(arguments))
 		#Confirm that we see all 3 arguments
 		text = self._logfile_read(ljob1)
+		logging.debug("arguments: {0}".format(text))
 		last = 0
 		for arg in arguments:
 			last = text.find(self.my_arg_str_match.format(arg), last)
@@ -306,7 +308,6 @@ class TestET(unittest.TestCase):
 		self.assertTrue(ltree.is_done())
 		self.assertTrue(self.tree.is_done())
 		logging.debug("{0} == {1}".format(self.ljob1_count, len(arguments)))
-		self.assertTrue(self.ljob1_count == len(arguments))
 		self.test_graph(target="{0}/cyt.png".format(self.workdir))
 
 	def test_resource_validation(self):
@@ -315,10 +316,6 @@ class TestET(unittest.TestCase):
 		self.job1.resources.append(resource)
 		self.assertEqual(self.tree.validate(), [])
 
-		self.tree.resources.remove(resource)
-		self.assertNotEqual(self.tree.validate(), [])
-
-		self.tree.resources.append(resource)
 		self.test_xml()
 
 	def _test_resource_evhandler(self, times, state, event):
@@ -391,8 +388,14 @@ class TestET(unittest.TestCase):
 			logging.debug("job started")
 			self.tree.join()
 
+		logging.debug("job4 got executed {0} times.".format(job4.execcount))
 		self.assertTrue(job4.execcount == 2)
 		self.assertTrue(self.tree.is_done())
+
+	def test_colors(self):
+		for state in self.job1.STATES:
+			self.assertTrue(state in self.job1.STATE_COLORS)
+
 
 if  __name__ == '__main__':
 	unittest.main()

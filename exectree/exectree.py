@@ -38,13 +38,13 @@ class IterratorOverrunError(RuntimeError):
 
 #class ExecJob(Greenlet):
 class ExecJob(object):
-	STATES = (0, 1, 2, 3, 4, 5, 6)
-	STATE_IDLE, STATE_RUNNING, STATE_SUCCESSFULL, STATE_FAILED, STATE_CANCELLED, STATE_UNDEF, STATE_RESET = STATES
+	STATES = (0, 1, 2, 3, 4, 5, 6, 7)
+	STATE_IDLE, STATE_RUNNING, STATE_SUCCESSFULL, STATE_FAILED, STATE_CANCELLED, STATE_UNDEF, STATE_RESET, STATE_BLOCKED = STATES
 	DEPENDENCY_STATES = [ STATE_SUCCESSFULL, STATE_FAILED ]
 	DONE_STATES = [ STATE_SUCCESSFULL, STATE_FAILED, STATE_CANCELLED, STATE_UNDEF ]
 	SUCCESS_STATES = [ STATE_SUCCESSFULL, STATE_UNDEF ]
 	ERROR_STATES = [ STATE_FAILED, STATE_CANCELLED ]
-	PRESTART_STATES = [ STATE_IDLE, STATE_UNDEF ]
+	PRESTART_STATES = [ STATE_IDLE, STATE_UNDEF, STATE_BLOCKED ]
 	UNDEF_JOB = "-"
 
 	STATE_COLORS = {
@@ -53,10 +53,12 @@ class ExecJob(object):
 			STATE_SUCCESSFULL:"green",
 			STATE_FAILED:"red",
 			STATE_CANCELLED:"blue",
-			STATE_UNDEF:"gray"
+			STATE_UNDEF:"gray",
+			STATE_BLOCKED:"darkorange",
+			STATE_RESET:"white"
 	}
 
-	def __init__(self, name="", jobpath=None, tree=None, logfile=None, xml=None, execiter=None, mustcomplete=True, subtree=None, arguments=None, resources=None, href=""):
+	def __init__(self, name="", jobpath=None, tree=None, logfile=None, xml=None, execiter=None, mustcomplete=True, subtree=None, arguments=None, resources=None, href="", tcolor="lavender"):
 		if arguments is None:
 			arguments = []
 		if resources is None:
@@ -75,6 +77,7 @@ class ExecJob(object):
 				subtreeuuid = xml.attrib.get("subtreeuuid", None)
 				logfile = xml.attrib.get("logfile", None)
 				href = xml.attrib.get("href", "")
+				tcolor = xml.attrib.get("tcolor", tcolor)
 			except KeyError:
 				logging.error("Required xml attribute is not found.")
 				raise
@@ -125,7 +128,9 @@ class ExecJob(object):
 		self.arguments = arguments
 		self.resources = resources
 		self.execcount = 0
+		self.failcount = 0
 		self.href = href
+		self.tcolor = tcolor
 
 	def xml(self):
 		""" Generate xml Element object representing of ExecJob """
@@ -133,7 +138,8 @@ class ExecJob(object):
 			"name":str(self.name),
 			"uuid":str(self.uuid.hex),
 			"mustcomplete":str(self.mustcomplete),
-			"href":str(self.href)
+			"href":str(self.href),
+			"tcolor":self.tcolor
 		}
 		if self.jobpath is not None:
 			args["jobpath"] = str(self.jobpath)
@@ -218,7 +224,9 @@ class ExecJob(object):
 			label = self.name
 		kw = {
 			"style" : "filled",
-			"fillcolor" : self.STATE_COLORS[self.state]
+			"fillcolor" : self.STATE_COLORS[self.state],
+			"color" : self.tcolor,
+			"penwidth" : "3"
 			}
 		if self.href:
 			kw["href"] = "\"{0}\"".format(self.href)
@@ -228,7 +236,7 @@ class ExecJob(object):
 	def _dot_tree(self):
 		subg = pydot.Subgraph(
 				self.subtree.cluster_name,
-				color = "blue",
+				color = "deepskyblue",
 			)
 		if self.subtree.iterator is None:
 			subg.set_label(self.name)
@@ -241,7 +249,6 @@ class ExecJob(object):
 					self.subtree.iterator.len()
 				)
 			)
-		logging.debug(subg.to_string())
 		self.subtree.dot_graph(subg)
 		return subg
 
@@ -289,6 +296,7 @@ class ExecJob(object):
 		if self.jobpath is not None and self.subtree is not None:
 			errors.append(
 				"subtree and jobpath of {0} are set. Only one can be set."
+				.format(self.name)
 			)
 		elif self.jobpath is not None:
 			if self.jobpath == self.UNDEF_JOB:
@@ -309,13 +317,6 @@ class ExecJob(object):
 			errors.extend(self.subtree.validate())
 		else:
 			errors.append("subtree or jobpath of {0} must be set.")
-
-		for resource in self.resources:
-			if resource not in self.tree.resources:
-				errors.append(
-					"{0} Resource {1} is needed for job {2} is not part of tree {3}".
-					format(prepend, resource, self.name, self.tree.name)
-				)
 
 		return errors
 
@@ -414,6 +415,7 @@ class ExecJob(object):
 	def _acquire_resources(self, acquire_timeout=60, max_attempts=1000):
 		if len(self.resources) < 1:
 			return True
+		self.state = self.STATE_BLOCKED
 		reserved = []
 		lastacquire = False
 		backofftime = len(self.resources) * acquire_timeout
@@ -434,6 +436,7 @@ class ExecJob(object):
 					break
 			else:
 				break
+		self.state = self.STATE_IDLE
 		return lastacquire
 
 	def read_log(self, size):
@@ -457,7 +460,6 @@ class ExecJob(object):
 		if self.is_success():
 			return False
 		g = Greenlet.spawn(self._run)
-		self.execcount += 1
 		return True
 
 	def _run(self):
@@ -508,10 +510,12 @@ class ExecJob(object):
 		finally:
 			self._release_resources(self.resources)
 
+		self.execcount += 1
 		if rcode == 0:
 			self.state = self.STATE_SUCCESSFULL
 			return True
 		else:
+			self.failcount += 1
 			self.state = self.STATE_FAILED
 			return False
 
@@ -521,7 +525,7 @@ class ExecIter(object):
 			self.args = []
 		else:
 			self.args = args
-		self.run = 1
+		self.run = 0
 		self.valid = None
 		self.name = name
 
@@ -529,6 +533,7 @@ class ExecIter(object):
 		return "<ExecIter {0}>".format(self.name)
 
 	def is_exhausted(self):
+		logging.debug("is_exhausted {0}>{1}".format(self.run, len(self.args)))
 		if self.run >= len(self.args):
 			return True
 		return False
@@ -537,20 +542,16 @@ class ExecIter(object):
 		return len(self.args)
 
 	def increment(self, inc=1):
-		if (self.run + inc) >= len(self.args):
-			self.run = len(self.args)
-		else:
-			self.run += inc
-		return self.run
+		self.run += inc
+		return self.run < len(self.args)
 
 	@property
 	def argument(self):
-		if self.run <= 1 and len(self.args)  < 1:
+		if len(self.args) <= 0:
 			return ""
 		elif self.run > len(self.args):
-			raise IterratorOverrunError("Iterator has no more elements")
-		else:
-			return self.args[self.run-1]
+			return self.args[len(self.args)-1]
+		return self.args[self.run]
 
 class ExecResource(object):
 	def __init__(self, tree, name="", avail=0, xml=None):
@@ -580,7 +581,6 @@ class ExecResource(object):
 		}
 		eri = et.Element("execResource", args)
 		return eri
-
 
 	def reserve(self, blocking=True, timeout=None):
 		if self.avail < 0:
@@ -706,7 +706,8 @@ class ExecTree(object):
 	def cluster_name(self):
 		#pydot does not properly handle space in subtree
 		name = self.name.replace(" ", "_")
-		return "cluster_{0}".format(name)
+		return "\"cluster_{0}\"".format(name)
+		#return "\"cluster_{0}\"".format(self.name)
 
 	def xml(self):
 		args = {
@@ -835,7 +836,7 @@ class ExecTree(object):
 
 	def dot_graph(self, graph=None, arborescent=False):
 		if graph is None:
-			graph = pydot.Dot(graph_type="digraph", bgcolor="transparent")
+			graph = pydot.Dot(graph_type="digraph", bgcolor="black", fontcolor="deepskyblue")
 		for job in self.jobs:
 			job.dot(graph)
 		if arborescent:
@@ -850,13 +851,27 @@ class ExecTree(object):
 				dep.dot(graph)
 		return graph
 
-	def json_status(self):
-		status = {}
+	def _rjobs(self):
+		"generates all jobs, even those belonging to subtrees"
 		for job in self.jobs:
+			yield job
+			if job.subtree is not None:
+				for sjob in job.subtree._rjobs():
+					yield sjob
+
+	def json_status(self, status=None):
+		if status is None:
+			status = {}
+		for job in self._rjobs():
 			status[job.name] = {
 				"status":job.STATE_COLORS[job.state],
 				"progress":job.progress
 			}
+			if job.subtree is not None and job.subtree.iterator is not None:
+				status[job.name]["iteration"] = "{0}/{1}".format(
+					job.subtree.iterator.run,
+					job.subtree.iterator.len()
+				)
 		return simplejson.dumps(status)
 
 	# dot's html map output is: "x,y x,y x,y"
@@ -867,6 +882,7 @@ class ExecTree(object):
 		if overwrite or not os.path.exists(svg):
 			with open(svg, "w") as sfd:
 				g = self.dot_graph(arborescent=arborescent)
+				logging.debug(g.to_string())
 				c = self.FIXCOORD.sub(',', g.create_svg())
 				sfd.write(c)
 		with open(json, "w") as jfd:
@@ -1024,21 +1040,26 @@ class ExecTree(object):
 		logging.debug("Advancing tree {0}.".format(self.name))
 		self.done_event.clear()
 		if self.iterator is not None:
-			self.iterator.increment()
-		for job in self.jobs:
-			job.reset()
+			inc = self.iterator.increment()
+		else:
+			inc = True 
+		if inc:
+			for job in self.jobs:
+				job.reset()
 
 	def iterrun(self):
 		if self.iterator is None:
+			logging.debug("Iterator is none")
 			self.run()
 			return None
 		if self.iterator.is_exhausted():
+			logging.debug("Iterator is exhausted")
 			return False
 		while True:
 			self.run()
+			self.advance()
 			if self.iterator.is_exhausted():
 				break
-			self.advance()
 
 	def join(self):
 		self.done_event.wait()
