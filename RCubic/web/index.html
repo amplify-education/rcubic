@@ -175,6 +175,12 @@ $('g.node').live("click",(function(e) {
 <!-- On document load, load the image file and create refresh -->
 function fillColors() {
     $.getJSON(getPrefix()+'/nodes.json'+'?' + Math.round(new Date().getTime()),function(data) {
+		$('.cluster').each(function(i,node){
+            var script = $('title', node).text().replace("cluster_", "");
+			if(data[script]['iteration'] != undefined){
+				$('text', node).text(script + " " + data[script]['iteration']);
+			}
+		});
         <!--Select all the nodes -->
         $('.graph > .node').each(function(i,node) {
             <!--Get script name-->
@@ -225,6 +231,8 @@ function fillColors() {
 $(document).ready(function() {
     $('#graph').load(getPrefix() + "/arb.svg", function() {fillColors();});
     var refreshGraph = setInterval(function() {fillColors();}, 3000);
+
+	
 });
 </script>
 </head>
