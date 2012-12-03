@@ -50,9 +50,9 @@ class ExecJob(object):
 	STATE_COLORS = {
 			STATE_IDLE:"white",
 			STATE_RUNNING:"yellow",
-			STATE_SUCCESSFULL:"green",
+			STATE_SUCCESSFULL:"lawngreen",
 			STATE_FAILED:"red",
-			STATE_CANCELLED:"blue",
+			STATE_CANCELLED:"deepskyblue",
 			STATE_UNDEF:"gray",
 			STATE_BLOCKED:"darkorange",
 			STATE_RESET:"white"
