@@ -1,5 +1,4 @@
 #!/usr/bin/python
-<<<<<<< HEAD
 
 # This file is part of RCubic
 #
