@@ -159,6 +159,11 @@ class Rcubic(object):
 		self._initGit()
 		self._readConfig("%s/config.xml" %(self.releaseDir), splitOptions=splitOptions)
 
+		if self.opts.environment:
+			self.environment = self.opts.environment
+		elif "environment" in self.config:
+			self.environment = self.config["environment"]
+
 		self._initNotification()
 
 		if self.opts.sessionMode:
@@ -178,7 +183,12 @@ class Rcubic(object):
 		)
 		self.rsp.read_dirs(self.scriptDir)
 		self.rsp.read_dirs(self.scriptOverrideDir, True)
+
 		self.tree = self.rsp.init_tree()
+		self.tree.legend["time"] = time.strftime("%Y-%m-%d %H:%M:%S")
+		self.tree.legend["version"] = self.opts.release
+		self.tree.legend["environment"] = self.environment
+
 		for script in self.rsp.scripts():
 			for e in script.job.DONE_STATES:
 				handler = functools.partial(self.statusEventHandler, script)
@@ -189,6 +199,7 @@ class Rcubic(object):
 		except:
 			self.cleanup()
 			raise
+
 
 		if self.opts.validate:
 			self.cleanup()
@@ -228,11 +239,7 @@ class Rcubic(object):
 					.format(rs.name, self.config.get("scriptregex", ""))
 				)
 
-		if self.opts.environment:
-			self.environment = self.opts.environment
-		elif "environment" in self.config:
-			self.environment = self.config["environment"]
-		else:
+		if not self.environment:
 			errors.append("Environment not not specified.")
 
 		self._updateGraph(updateDot=True)
