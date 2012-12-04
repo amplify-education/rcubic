@@ -1,4 +1,5 @@
 #!/usr/bin/python
+<<<<<<< HEAD
 
 # This file is part of RCubic
 #
@@ -32,7 +33,7 @@ setup(name = 'RCubic',
       version = '1.0',
       description = 'RCubic',
       # Required packages
-      requires = ['MiniREST', 'lxml', 'simplejson'],
+      requires = ['MiniREST', 'lxml', 'simplejson', 'pydot', 'gevent'],
       # List what we provide and obolete for updates
       provides = ['RCubic'],
       obsoletes = ['RCubic'],
