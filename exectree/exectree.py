@@ -86,9 +86,13 @@ class ExecJob(object):
 					arguments.append(arg.attrib["value"])
 				except KeyError:
 					logging.error(
-						"Argument of {0} is missing required xml attribute."
-						.format(name)
+						"Argument of is missing required xml attribute ({0}:{1})."
+						.format(
+							legenditem.base,
+							legenditem.sourceline
+						)
 					)
+					raise
 			resources = []
 			for resource in xml.findall("execResource"):
 				fr = tree.find_resource(resource.attrib["uuid"])
@@ -217,7 +221,7 @@ class ExecJob(object):
 		if value >= 0 and value <= 100:
 			self._progress = value
 
-	def _dot_node(self):
+	def _dot_node(self, font):
 		if self.progress >= 0:
 			label = "{0}\n{1}".format(self.name, self.progress)
 		else:
@@ -226,17 +230,19 @@ class ExecJob(object):
 			"style" : "filled",
 			"fillcolor" : self.STATE_COLORS[self.state],
 			"color" : self.tcolor,
-			"penwidth" : "3"
+			"penwidth" : "3",
+			"fontname" : font,
 			}
 		if self.href:
 			kw["href"] = "\"{0}\"".format(self.href)
 		node = pydot.Node(label, **kw)
 		return node
 
-	def _dot_tree(self):
+	def _dot_tree(self, font):
 		subg = pydot.Subgraph(
 				self.subtree.cluster_name,
 				color = "deepskyblue",
+				fontname = font
 			)
 		if self.subtree.iterator is None:
 			subg.set_label(self.name)
@@ -252,13 +258,13 @@ class ExecJob(object):
 		self.subtree.dot_graph(subg)
 		return subg
 
-	def dot(self, graph):
+	def dot(self, graph, font):
 		""" Generate dot object representing ExecJob """
 		if self.jobpath is not None:
-			rep = self._dot_node()
+			rep = self._dot_node(font)
 			graph.add_node(rep)
 		elif self.subtree is not None:
-			rep = self._dot_tree()
+			rep = self._dot_tree(font)
 			graph.add_subgraph(rep)
 			graph.set_compound("True")
 
@@ -676,6 +682,7 @@ class ExecTree(object):
 		self.resources = []
 		self.cancelled = False
 		self.started = False
+		self.legend = {}
 		if xml == None:
 			self.uuid = uuid.uuid4()
 			self.name = ""
@@ -701,6 +708,20 @@ class ExecTree(object):
 				self.jobs.append(ExecJob(tree=self, xml=xmljob))
 			for xmldep in xml.findall("execDependency"):
 				self.add_dep(xml=xmldep)
+			for legenditem in xml.findall("legendItem"):
+				try:
+					key = legenditem.attrib["name"]
+					value = legenditem.attrib["value"]
+					self.legend[key] = value
+				except KeyError:
+					logging.error(
+						"Legend item is missing required xml attribute ({0}:{1})."
+						.format(
+							legenditem.base,
+							legenditem.sourceline
+						)
+					)
+					raise
 
 	@property
 	def cluster_name(self):
@@ -728,6 +749,8 @@ class ExecTree(object):
 			eti.append(dep.xml())
 		for resource in self.resources:
 			eti.append(resource.xml())
+		for key, value in self.legend.iteritems():
+			eti.append(et.Element("legendItem", {key:value}))
 		return eti
 
 	def __str__(self):
@@ -834,11 +857,16 @@ class ExecTree(object):
 					gparents[job].append(e)
 		return gparents[job] + parents
 
-	def dot_graph(self, graph=None, arborescent=False):
+	def dot_graph(self, graph=None, arborescent=False, font="sans-serif"):
 		if graph is None:
-			graph = pydot.Dot(graph_type="digraph", bgcolor="black", fontcolor="deepskyblue")
+			graph = pydot.Dot(
+				graph_type="digraph",
+				bgcolor="black",
+				fontcolor="deepskyblue",
+				fontname=font
+			)
 		for job in self.jobs:
-			job.dot(graph)
+			job.dot(graph, font)
 		if arborescent:
 			gparents = {}
 			for job in self.jobs:
@@ -849,6 +877,24 @@ class ExecTree(object):
 		else:
 			for dep in self.deps:
 				dep.dot(graph)
+		if len(self.legend)>0:
+			legend = ""
+			for key, value in self.legend.iteritems():
+				legend = "{2}{0}:\t{1}\\n".format(key, value, legend)
+			legend = "\"{0}\"".format(legend)
+			sg = pydot.Subgraph("noncelegendnonce", rank="sink")
+			sg.add_node(
+				pydot.Node(
+					"noncelegendnonce",
+					shape="box",
+					margin="0",
+					label=legend,
+					color="deepskyblue",
+					fontcolor="deepskyblue",
+					fontname=font
+				)
+			)
+			graph.add_subgraph(sg)
 		return graph
 
 	def _rjobs(self):
