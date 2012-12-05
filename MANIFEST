@@ -7,11 +7,11 @@ RCubic/BotClient.py
 RCubic/RCubicClient.py
 RCubic/RCubicServer.py
 RCubic/RCubicUtilities.py
-RCubic/ReleaseScript.py
-RCubic/ResourceScheduler.py
 RCubic/RESTCommunicator.py
 RCubic/daemon.py
 RCubic/ScriptStatus.py
+RCubic/RCubicScript.py
+RCubic/exectree.py
 RCubic/__init__.py
 RCubic/rcubic.xml.template
 RCubic/web/index.html
