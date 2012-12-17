@@ -211,10 +211,11 @@ class Rcubic(object):
 		errors = []
 
 
+		group = None
 		for group in self.groups:
 			if group.autoadd == False:
 				break
-		if group.autoadd != False:
+		if group is None or  group.autoadd != False:
 			raise ConfigurationError("ERROR: No groups selected for installation")
 
 		egroups = []
@@ -479,12 +480,15 @@ class Rcubic(object):
 						(group, version)
 					)
 
+		if len(groups) <= 0:
+			raise ConfigurationError("There are 0 configured groups. Nothing to do.")
+
 		for gs in groupselect:
 			for g in groups:
 				if gs == g:
 					break
-			if gs != g.name:
-				raise ConfigurationError("Group %s is not in the configuration(%s)." %(gs, g.name))
+			if groups is not None or gs != g.name:
+				raise ConfigurationError("Group %s is not in the configuration." %gs)
 
 		logging.info("Installing groups %s." %
 			" ".join(sorted([group.name for group in groups]))
