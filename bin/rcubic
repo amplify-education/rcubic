@@ -62,6 +62,7 @@ from RCubic.RESTCommunicator import RESTCommunicator
 from RCubic.RCubicScript import RCubicScript, RCubicGroup, RCubicScriptParser
 from RCubic.RCubicUtilities import popenNonblock, ConfigurationError, FatalRuntimeError, LogToDB
 from RCubic.daemon import Daemon
+from RCubic import exectree
 #######
 
 #third party libraries:
@@ -472,12 +473,12 @@ class Rcubic(object):
 			elif rg.name in groupselect:
 				groups.append(rg)
 			elif len(groupselect) == 0:
-				if self.log.isNewestVersion(rg.name, rg.version):
+				if self.log.isNewestVersion(rg.name, rg.version, exectree.ExecJob.STATE_SUCCESSFULL):
 					groups.append(rg)
 				else:
 					logging.info(
 						"Skipping %s a version greater than or equal %s is installed." %
-						(group, version)
+						(rg.name, rg.version)
 					)
 
 		if len(groups) <= 0:
@@ -652,7 +653,7 @@ class Rcubic(object):
 			self.log = LogToDB(self.config["auditLog"])
 
 		#Cleanup and setup log directory.
-		if not self.opts.sessionMode:
+		if not self.opts.sessionMode and os.path.exists(self.logDir):
 			try:
 				shutil.rmtree(self.logDir)
 			except:
