@@ -540,7 +540,7 @@ class Rcubic(object):
 		#Validate and run validation scripts
 		if self.opts.strictValidation:
 			if os.path.exists(self.validationDir):
-				arguments = [ self.environment, self.opts.release, " ".join(self.groups)]
+				arguments = [ self.environment, self.opts.release, " ".join(map(str, self.groups))]
 				prependRe = re.compile("^", re.M)
 				for validationScript in os.listdir(self.validationDir):
 					validationScript = "%s/%s" %(self.validationDir, validationScript)
