@@ -60,9 +60,9 @@ class RCubicScript(object):
 			phase = RCubicScriptParser.PHASES[sphase[0]]
 		self.phase = phase
 
-		if len(blacklist) > 0 and name in blacklist:
+		if len(blacklist) > 0 and self.name in blacklist:
 			self.path="-"
-		elif len(whitelist) > 0 and name not in whitelist:
+		elif len(whitelist) > 0 and self.name not in whitelist:
 			self.path="-"
 
 	def _get_param(self, script, field, default=None):

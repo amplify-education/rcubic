@@ -488,7 +488,7 @@ class Rcubic(object):
 			for g in groups:
 				if gs == g:
 					break
-			if groups is not None or gs != g.name:
+			if gs != g.name:
 				raise ConfigurationError("Group %s is not in the configuration." %gs)
 
 		logging.info("Installing groups %s." %
@@ -519,6 +519,8 @@ class Rcubic(object):
 	def reschedule(self, scriptName):
 		job = self.tree.find_job(scriptName)
 		if job is None:
+			return False
+		if not job.is_failed():
 			return False
 		job.reset()
 		return job.start()
