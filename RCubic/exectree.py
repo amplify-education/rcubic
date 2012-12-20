@@ -1,3 +1,4 @@
+# vim: ts=4 noet filetype=python
 # This file is part of RCubic
 #
 #Copyright (c) 2012 Wireless Generation, Inc.

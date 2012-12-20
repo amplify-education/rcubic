@@ -1,3 +1,4 @@
+# vim: ts=4 noet filetype=python
 # This file is part of RCubic
 #
 #Copyright (c) 2012 Wireless Generation, Inc.
@@ -240,7 +241,11 @@ class RCubicScriptParser(object):
 	def eval_args(self, script):
 		logging.debug("iterator: {0}, cwd: {1}".format(script.iterator, self.workdir))
 		with open("/dev/null", "w") as devnull:
-			output = subprocess.check_output(script.iterator, stderr=devnull, cwd=self.workdir)
+			if hasattr(subprocess, "check_output"):
+				output = subprocess.check_output(script.iterator, stderr=devnull, cwd=self.workdir)
+			else:
+				p = subprocess.Popen(script.iterator, stdout=subprocess.PIPE, stderr=devnull, cwd=self.workdir)
+				output = p.communicate()[0]
 		seperator = re.compile("[,;\s]+")
 		args = seperator.split(output)
 		while "" in args:
