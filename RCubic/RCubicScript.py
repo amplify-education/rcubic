@@ -254,8 +254,12 @@ class RCubicScriptParser(object):
 		logging.debug("Arguments {0}".format(args))
 		return args
 
-	def set_href(self):
-		for script in self.script():
+	def set_href(self, gerrit, project, githash, repopath):
+		logging.debug("set hrefs")
+		for script in self.scripts():
+			script.href = "{0}/gitweb?p={1};a=blob;f={2};hb={3}".format(
+				gerrit, project, script.path[len(repopath)+1:], githash
+			)
 
 	def init_tree(self):
 		self.tree = exectree.ExecTree()
@@ -284,7 +288,7 @@ class RCubicScriptParser(object):
 				script.path,
 				logfile=script.logfile,
 				arguments=[script.version],
-				href="http://example.com/"
+				href=script.href
 			)
 			if script.name in self.subtrees:
 				script.job.jobpath = None

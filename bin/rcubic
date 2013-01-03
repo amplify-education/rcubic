@@ -185,6 +185,8 @@ class Rcubic(object):
 		self.rsp.read_dirs(self.scriptDir)
 		self.rsp.read_dirs(self.scriptOverrideDir, True)
 
+		self.rsp.set_href(self.config["gerritURL"], self.config["gerritProject"], self.gitHead, self.gitDir)
+
 		self.tree = self.rsp.init_tree()
 		self.tree.legend["time"] = time.strftime("%Y-%m-%d %H:%M:%S")
 		self.tree.legend["version"] = self.opts.release
