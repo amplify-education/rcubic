@@ -517,19 +517,33 @@ class Rcubic(object):
 		return exit
 
 	def reschedule(self, scriptName):
-		job = self.tree.find_job(scriptName)
+		trees = list(self.tree.subtrees)
+		trees.append(self.tree)
+		for tree in trees:
+			job = tree.find_job(scriptName)
+			if job is not None:
+				break
 		if job is None:
+			logging.debug("Reschedule failed: job not found")
 			return False
 		if not job.is_failed():
+			logging.debug("Reschedule failed: job has not failed")
 			return False
 		job.reset()
 		return job.start()
 
 	def manualOverride(self, scriptName):
-		job = self.tree.find_job(scriptName)
+		trees = list(self.tree.subtrees)
+		trees.append(self.tree)
+		for tree in trees:
+			job = tree.find_job(scriptName)
+			if job is not None:
+				break
 		if job is None:
+			logging.debug("Override failed: job not found")
 			return False
 		if job.state not in job.ERROR_STATES:
+			logging.debug("Override failed: job has not failed")
 			return False
 		job.state = job.STATE_SUCCESSFULL
 		return True

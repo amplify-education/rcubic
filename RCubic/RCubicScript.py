@@ -37,7 +37,7 @@ class RCubicScript(object):
 		self.name = filepath.split("/")[-1]
 		self.version = version
 		self.override = override
-		self.logfile = "{0}/{1}".format(logdir, self.name)
+		self.logfile = "{0}/{1}.log".format(logdir, self.name)
 
 		with open(self.path) as fd:
 			script = fd.read()
@@ -56,6 +56,7 @@ class RCubicScript(object):
 		else:
 			r = regexval.search(script)
 			self.regexval = r is not None
+		self.href = ""
 
 		if len(sphase) >= 1:
 			phase = RCubicScriptParser.PHASES[sphase[0]]
@@ -253,6 +254,8 @@ class RCubicScriptParser(object):
 		logging.debug("Arguments {0}".format(args))
 		return args
 
+	def set_href(self):
+		for script in self.script():
 
 	def init_tree(self):
 		self.tree = exectree.ExecTree()
@@ -281,7 +284,7 @@ class RCubicScriptParser(object):
 				script.path,
 				logfile=script.logfile,
 				arguments=[script.version],
-				href="http://myspace.com/"
+				href="http://example.com/"
 			)
 			if script.name in self.subtrees:
 				script.job.jobpath = None

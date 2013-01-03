@@ -819,6 +819,8 @@ class ExecTree(object):
 	def add_job(self, job):
 		if self.find_job(job.name):
 			raise JobDefinedError("Job with same name ({0}) already part of tree".format(job))
+		if job.subtree is not None and job.subtree not in self.subtrees:
+			self.subtrees.append(job.subtree)
 		job.tree = self
 		self.jobs.append(job)
 
