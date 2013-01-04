@@ -839,7 +839,7 @@ class ExecTree(object):
 		if not isinstance(parent, ExecJob):
 			parent = self.find_job(parent, parent)
 			if not isinstance(parent, ExecJob):
-				raise JobUndefinedError("Job {0} if needed by {2} but is not defined in (tree: {1}).".format(parent, self.name, child))
+				raise JobUndefinedError("Job {0} is needed by {2} but is not defined in (tree: {1}).".format(parent, self.name, child))
 		if not isinstance(child, ExecJob):
 			child = self.find_job(child, child)
 			if not isinstance(child, ExecJob):

@@ -264,6 +264,7 @@ class RCubicScriptParser(object):
 	def init_tree(self):
 		self.tree = exectree.ExecTree()
 		self.tree.cwd = self.workdir
+		self.tree.name = "rcubic"
 
 		#Initialize all sub trees
 		for script in self.scripts():
@@ -323,7 +324,14 @@ class RCubicScriptParser(object):
 				tree = self.subtrees[script.idep]
 
 			for dep in self._glob_expand(script.hdep):
-				d = tree.add_dep(dep, script.job)
+				try:
+					d = tree.add_dep(dep, script.job)
+				except exectree.JobUndefinedError:
+					if script.job.is_defined():
+						raise
+					dep = exectree.ExecJob(dep, "-", mustcomplete=False)
+					tree.add_job(dep)
+					d = tree.add_dep(dep, script.job)
 				d.color = {"defined":"deepskyblue", "undefined":"red"}
 			for dep in self._glob_expand(script.sdep):
 				try:
@@ -337,9 +345,8 @@ class RCubicScriptParser(object):
 				try:
 					d = tree.add_dep(script.job, dep)
 				except exectree.JobUndefinedError:
-					dep = tree.add_job(
-						exectree.ExecJob(dep, "-", mustcomplete=False)
-					)
+					dep = exectree.ExecJob(dep, "-", mustcomplete=False)
+					tree.add_job(dep)
 					d = tree.add_dep(script.job, dep)
 				d.color = {"defined":"lawngreen", "undefined":"palegreen"}
 			#stems = self.tree.stems()
