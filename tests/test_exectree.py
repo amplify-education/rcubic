@@ -1,6 +1,6 @@
 #!/usr/bin/python
 
-from exectree import exectree
+from RCubic import exectree
 import unittest
 import pydot
 from lxml import etree
