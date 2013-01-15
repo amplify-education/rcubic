@@ -554,7 +554,7 @@ class Rcubic(object):
 		errorMessages = ""
 
 		#Validate and run validation scripts
-		if self.opts.strictValidation:
+		if not self.opts.weakvalidation:
 			if os.path.exists(self.validationDir):
 				arguments = [ self.environment, self.opts.release, " ".join(map(str, self.groups))]
 				prependRe = re.compile("^", re.M)
@@ -743,7 +743,7 @@ if __name__ == "__main__":
 	argParser.add_argument('-g', dest='group', metavar='group', action='append', default=[],
 							help='Select Group to run. Can be specified multiple times for multiple groups.')
 	argParser.add_argument('-v', dest='validate', action='store_const', const=True, default=False, help='Validate configuration.')
-	argParser.add_argument('-V', '--extval', '--strictValidation', dest='strictValidation', action='store_const', const=True, default=False, help='Strict validation configuration. Run validation scripts.')
+	argParser.add_argument('-w', '--weakval', dest='weakvalidation', action='store_const', const=True, default=False, help='Skip validation scripts.')
 	argParser.add_argument('-f', dest='foreground', action='store_const', const=True, default=False,  help='Run in foreground (debug) mode.')
 	argParser.add_argument('-s', dest='sessionMode', action='store_const', const=True, default=False,  help='Run in Session mode.')
 	argParser.add_argument('-a', dest='whitelist', action='append', default=None,
