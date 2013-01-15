@@ -39,22 +39,39 @@ import logging
 import simplejson
 import re
 
+
 class TreeDefinedError(RuntimeError):
 	pass
+
+
 class TreeUndefinedError(RuntimeError):
 	pass
+
+
 class JobDefinedError(RuntimeError):
 	pass
+
+
 class JobError(RuntimeError):
 	pass
+
+
 class JobUndefinedError(RuntimeError):
 	pass
+
+
 class UnknownStateError(RuntimeError):
 	pass
+
+
 class DependencyError(RuntimeError):
 	pass
+
+
 class XMLError(RuntimeError):
 	pass
+
+
 class IterratorOverrunError(RuntimeError):
 	pass
 
@@ -62,26 +79,31 @@ class IterratorOverrunError(RuntimeError):
 #class ExecJob(Greenlet):
 class ExecJob(object):
 	STATES = (0, 1, 2, 3, 4, 5, 6, 7)
-	STATE_IDLE, STATE_RUNNING, STATE_SUCCESSFULL, STATE_FAILED, STATE_CANCELLED, STATE_UNDEF, STATE_RESET, STATE_BLOCKED = STATES
-	DEPENDENCY_STATES = [ STATE_SUCCESSFULL, STATE_FAILED ]
-	DONE_STATES = [ STATE_SUCCESSFULL, STATE_FAILED, STATE_CANCELLED, STATE_UNDEF ]
-	SUCCESS_STATES = [ STATE_SUCCESSFULL, STATE_UNDEF ]
-	ERROR_STATES = [ STATE_FAILED, STATE_CANCELLED ]
-	PRESTART_STATES = [ STATE_IDLE, STATE_UNDEF, STATE_BLOCKED ]
+	(
+		STATE_IDLE, STATE_RUNNING, STATE_SUCCESSFULL, STATE_FAILED,
+		STATE_CANCELLED, STATE_UNDEF, STATE_RESET, STATE_BLOCKED
+	) = STATES
+	DEPENDENCY_STATES = [STATE_SUCCESSFULL, STATE_FAILED]
+	DONE_STATES = [STATE_SUCCESSFULL, STATE_FAILED, STATE_CANCELLED, STATE_UNDEF]
+	SUCCESS_STATES = [STATE_SUCCESSFULL, STATE_UNDEF]
+	ERROR_STATES = [STATE_FAILED, STATE_CANCELLED]
+	PRESTART_STATES = [STATE_IDLE, STATE_UNDEF, STATE_BLOCKED]
 	UNDEF_JOB = "-"
 
 	STATE_COLORS = {
-			STATE_IDLE:"white",
-			STATE_RUNNING:"yellow",
-			STATE_SUCCESSFULL:"lawngreen",
-			STATE_FAILED:"red",
-			STATE_CANCELLED:"deepskyblue",
-			STATE_UNDEF:"gray",
-			STATE_BLOCKED:"darkorange",
-			STATE_RESET:"white"
+			STATE_IDLE: "white",
+			STATE_RUNNING: "yellow",
+			STATE_SUCCESSFULL: "lawngreen",
+			STATE_FAILED: "red",
+			STATE_CANCELLED: "deepskyblue",
+			STATE_UNDEF: "gray",
+			STATE_BLOCKED: "darkorange",
+			STATE_RESET: "white"
 	}
 
-	def __init__(self, name="", jobpath=None, tree=None, logfile=None, xml=None, execiter=None, mustcomplete=True, subtree=None, arguments=None, resources=None, href="", tcolor="lavender"):
+	def __init__(self, name="", jobpath=None, tree=None, logfile=None,
+			xml=None, execiter=None, mustcomplete=True, subtree=None,
+			arguments=None, resources=None, href="", tcolor="lavender"):
 		if arguments is None:
 			arguments = []
 		if resources is None:
@@ -162,11 +184,11 @@ class ExecJob(object):
 	def xml(self):
 		""" Generate xml Element object representing of ExecJob """
 		args = {
-			"name":str(self.name),
-			"uuid":str(self.uuid.hex),
-			"mustcomplete":str(self.mustcomplete),
-			"href":str(self.href),
-			"tcolor":self.tcolor
+			"name": str(self.name),
+			"uuid": str(self.uuid.hex),
+			"mustcomplete": str(self.mustcomplete),
+			"href": str(self.href),
+			"tcolor": self.tcolor
 		}
 		if self.jobpath is not None:
 			args["jobpath"] = str(self.jobpath)
@@ -180,11 +202,11 @@ class ExecJob(object):
 
 		if self.arguments is not None:
 			for arg in self.arguments:
-				eti.append(et.Element("execArg", {"value":arg}))
+				eti.append(et.Element("execArg", {"value": arg}))
 
 		if self.resources is not None:
 			for resource in self.resources:
-				eti.append(et.Element("execResource", {"uuid":str(resource.uuid.hex)}))
+				eti.append(et.Element("execResource", {"uuid": str(resource.uuid.hex)}))
 
 		return eti
 
@@ -250,11 +272,11 @@ class ExecJob(object):
 		else:
 			label = self.name
 		kw = {
-			"style" : "filled",
-			"fillcolor" : self.STATE_COLORS[self.state],
-			"color" : self.tcolor,
-			"penwidth" : "3",
-			"fontname" : font,
+			"style": "filled",
+			"fillcolor": self.STATE_COLORS[self.state],
+			"color": self.tcolor,
+			"penwidth": "3",
+			"fontname": font,
 			}
 		if self.href:
 			kw["href"] = "\"{0}\"".format(self.href)
@@ -264,8 +286,8 @@ class ExecJob(object):
 	def _dot_tree(self, font):
 		subg = pydot.Subgraph(
 				self.subtree.cluster_name,
-				color = "deepskyblue",
-				fontname = font
+				color="deepskyblue",
+				fontname=font
 			)
 		if self.subtree.iterator is None:
 			subg.set_label(self.name)
@@ -369,18 +391,21 @@ class ExecJob(object):
 			dep.wait()
 
 	@staticmethod
-	def _popen(args, data='', stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, cwd=None):
+	def _popen(args, data='', stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+			stderr=subprocess.STDOUT, cwd=None):
 		"""Communicate with the process non-blockingly.
-		http://code.google.com/p/gevent/source/browse/examples/processes.py?r=23469225e58196aeb89393ede697e6d11d88844b
+		http://code.google.com/p/gevent/source/browse/examples/processes.py?r=2
+		3469225e58196aeb89393ede697e6d11d88844b
 
 		This is to be obsoleted with gevent subprocess
 		"""
-		p = subprocess.Popen(args, stdin=stdin, stdout=stdout, stderr=stderr, cwd=cwd)
+		p = subprocess.Popen(
+			args, stdin=stdin, stdout=stdout, stderr=stderr, cwd=cwd
+		)
 		real_stdin = p.stdin if stdin == subprocess.PIPE else stdin
-		fcntl.fcntl(real_stdin, fcntl.F_SETFL, os.O_NONBLOCK)  # make the file nonblocking
+		fcntl.fcntl(real_stdin, fcntl.F_SETFL, os.O_NONBLOCK)
 		real_stdout = p.stdout if stdout == subprocess.PIPE else stdout
-		fcntl.fcntl(real_stdout, fcntl.F_SETFL, os.O_NONBLOCK)	# make the file nonblocking
-
+		fcntl.fcntl(real_stdout, fcntl.F_SETFL, os.O_NONBLOCK)
 
 		if data:
 			bytes_total = len(data)
@@ -435,7 +460,6 @@ class ExecJob(object):
 		self.state = self.STATE_CANCELLED
 		return True
 
-
 	def _release_resources(self, resources):
 		logging.debug("releasing: {0}".format(resources))
 		for r in resources:
@@ -455,9 +479,9 @@ class ExecJob(object):
 					reserved.append(resource)
 					lastacquire = True
 				else:
-					lastacquire  = False
+					lastacquire = False
 					break
-			if lastacquire == False:
+			if not lastacquire:
 				attempt += 1
 				self._release_resources(reserved)
 				gevent.sleep(backofftime + random.randint(0, acquire_timeout))
@@ -473,7 +497,7 @@ class ExecJob(object):
 			return ""
 		try:
 			with open(self.logfile, 'r') as fd:
-				fd.seek(0,2)
+				fd.seek(0, 2)
 				filesize = fd.tell()
 				fd.seek(max(-size, -filesize), 2)
 				return fd.read()
@@ -483,7 +507,10 @@ class ExecJob(object):
 
 	def start(self):
 		if self.state == self.STATE_UNDEF:
-			logging.debug("{0} is short circuiting ({1})".format(self.name, self.state))
+			logging.debug("{0} is short circuiting ({1})".format(
+					self.name, self.state
+				)
+			)
 			self.events[self.STATE_SUCCESSFULL].set()
 			return True
 		if self.is_success():
@@ -548,9 +575,11 @@ class ExecJob(object):
 			self.state = self.STATE_FAILED
 			return False
 
+
 class ExecIter(object):
+
 	def __init__(self, name=None, args=None):
-		if args == None:
+		if args is None:
 			self.args = []
 		else:
 			self.args = args
@@ -579,10 +608,12 @@ class ExecIter(object):
 		if len(self.args) <= 0:
 			return ""
 		elif self.run > len(self.args):
-			return self.args[len(self.args)-1]
+			return self.args[len(self.args) - 1]
 		return self.args[self.run]
 
+
 class ExecResource(object):
+
 	def __init__(self, tree, name="", avail=0, xml=None):
 		if xml is not None:
 			if xml.tag != "execResource":
@@ -604,9 +635,9 @@ class ExecResource(object):
 
 	def xml(self):
 		args = {
-			"name":str(self.name),
-			"uuid":str(self.uuid.hex),
-			"avail":str(self.avail),
+			"name": str(self.name),
+			"uuid": str(self.uuid.hex),
+			"avail": str(self.avail),
 		}
 		eri = et.Element("execResource", args)
 		return eri
@@ -635,14 +666,15 @@ class ExecResource(object):
 		if self.used <= 0:
 			self.used = 0
 		else:
-			self.used -=1
+			self.used -= 1
 		self.event.set()
+
 
 class ExecDependency(object):
 	def __init__(self, parent, child, state=ExecJob.STATE_SUCCESSFULL):
 		self.parent = parent
 		self.child = child
-		self.color = {"undefined":"palegreen", "defined":"deepskyblue"}
+		self.color = {"undefined": "palegreen", "defined": "deepskyblue"}
 
 		if state in ExecJob.STATES:
 			self.state = state
@@ -669,8 +701,11 @@ class ExecDependency(object):
 		""" Generate dot edge object repersenting dependency """
 
 		if self.parent.subtree is not None and self.child.subtree is not None:
-			#This is a bit tricky we need to loop 2x but the real problems is that it will look UGLY
-			raise NotImplementedError("Dependency between 2 subtrees is not implemented")
+			#This is a bit tricky we need to loop 2x but the real problems is
+			#that it will look UGLY
+			raise NotImplementedError(
+				"Dependency between 2 subtrees is not implemented"
+			)
 
 		parent_target = self.parent.name
 		child_target = self.child.name
@@ -690,7 +725,13 @@ class ExecDependency(object):
 
 	def xml(self):
 		""" Generate xml Element object representing the depedency """
-		args = {"parent":self.parent.uuid.hex, "child":self.child.uuid.hex, "state":`self.state`, "dcolor":self.color["defined"], "ucolor":self.color["undefined"]}
+		args = {
+			"parent": self.parent.uuid.hex,
+			"child": self.child.uuid.hex,
+			"state": `self.state`,
+			"dcolor": self.color["defined"],
+			"ucolor": self.color["undefined"]
+		}
 		eti = et.Element("execDependency", args)
 		return eti
 
@@ -706,7 +747,7 @@ class ExecTree(object):
 		self.cancelled = False
 		self.started = False
 		self.legend = {}
-		if xml == None:
+		if xml is None:
 			self.uuid = uuid.uuid4()
 			self.name = ""
 			self.href = ""
@@ -755,11 +796,11 @@ class ExecTree(object):
 
 	def xml(self):
 		args = {
-			"version":"1.0",
-			"name":self.name,
-			"href":self.href,
-			"uuid":self.uuid.hex,
-			"cwd":self.cwd
+			"version": "1.0",
+			"name": self.name,
+			"href": self.href,
+			"uuid": self.uuid.hex,
+			"cwd": self.cwd
 		}
 		eti = et.Element("execTree", args)
 		for job in self.jobs:
@@ -773,7 +814,7 @@ class ExecTree(object):
 		for resource in self.resources:
 			eti.append(resource.xml())
 		for key, value in self.legend.iteritems():
-			eti.append(et.Element("legendItem", {key:value}))
+			eti.append(et.Element("legendItem", {key: value}))
 		return eti
 
 	def __str__(self):
@@ -818,13 +859,16 @@ class ExecTree(object):
 
 	def add_job(self, job):
 		if self.find_job(job.name):
-			raise JobDefinedError("Job with same name ({0}) already part of tree".format(job))
+			raise JobDefinedError(
+				"Job with same name ({0}) already part of tree".format(job)
+			)
 		if job.subtree is not None and job.subtree not in self.subtrees:
 			self.subtrees.append(job.subtree)
 		job.tree = self
 		self.jobs.append(job)
 
-	def add_dep(self, parent=None, child=None, state=ExecJob.STATE_SUCCESSFULL, xml=None):
+	def add_dep(self, parent=None, child=None,
+			state=ExecJob.STATE_SUCCESSFULL, xml=None):
 		colors = None
 		dep = None
 		if xml is not None:
@@ -833,25 +877,38 @@ class ExecTree(object):
 			parent = xml.attrib["parent"]
 			child = xml.attrib["child"]
 			state = int(xml.attrib["state"])
-			colors = {"undefined":xml.attrib["ucolor"], "defined":xml.attrib["dcolor"]}
+			colors = {
+				"undefined": xml.attrib["ucolor"],
+				"defined": xml.attrib["dcolor"]
+			}
 
 		#Ensure parent and child are ExecJobs
 		if not isinstance(parent, ExecJob):
 			parent = self.find_job(parent, parent)
 			if not isinstance(parent, ExecJob):
-				raise JobUndefinedError("Job {0} is needed by {2} but is not defined in (tree: {1}).".format(parent, self.name, child))
+				raise JobUndefinedError(
+					"Job {0} is needed by {2} but is not defined in (tree: {1})."
+					.format(parent, self.name, child)
+				)
 		if not isinstance(child, ExecJob):
 			child = self.find_job(child, child)
 			if not isinstance(child, ExecJob):
-				raise JobUndefinedError("Child job {0} is not defined in tree: {1}.".format(child, self.name))
+				raise JobUndefinedError("Child job {0} is not defined in tree: {1}."
+					.format(child, self.name)
+				)
 
 		#Parent and Child must be members of the tree
 		for k in [child, parent]:
 			if k not in self.jobs:
-				raise JobUndefinedError("Job {0} is not part of the tree: {1}.".format(k.name, self.name))
+				raise JobUndefinedError(
+					"Job {0} is not part of the tree: {1}."
+					.format(k.name, self.name)
+				)
 
 		if parent is child:
-			raise DependencyError("Child cannot be own parent ({0}).".format(parent.name))
+			raise DependencyError("Child cannot be own parent ({0})."
+				.format(parent.name)
+			)
 
 		if parent not in child.parents():
 			dep = ExecDependency(parent, child, state)
@@ -902,7 +959,7 @@ class ExecTree(object):
 		else:
 			for dep in self.deps:
 				dep.dot(graph)
-		if len(self.legend)>0:
+		if len(self.legend) > 0:
 			legend = ""
 			for key, value in self.legend.iteritems():
 				legend = "{2}{0}:\t{1}\\n".format(key, value, legend)
@@ -935,8 +992,8 @@ class ExecTree(object):
 			status = {}
 		for job in self._rjobs():
 			status[job.name] = {
-				"status":job.STATE_COLORS[job.state],
-				"progress":job.progress
+				"status": job.STATE_COLORS[job.state],
+				"progress": job.progress
 			}
 			if job.subtree is not None and job.subtree.iterator is not None:
 				status[job.name]["iteration"] = "{0}/{1}".format(
@@ -1022,12 +1079,13 @@ class ExecTree(object):
 
 		return errors
 
-
 	def validate_nocycles(self, job, visited, parents=None):
 		""" Ensure we do not have cyclical dependencies in the tree """
 		if parents is None:
 			parents = []
-		#logging.debug("validate job: {0} (parents:{1} children:{2})".format(job.name, [v.name for v in parents], [c.name for c in job.children()]))
+		#logging.debug("validate job: {0} (parents:{1} children:{2})".format(
+		#	job.name, [v.name for v in parents], [c.name for c in job.children()])
+		#)
 		if job in parents:
 			return False
 		parents.append(job)
@@ -1092,7 +1150,9 @@ class ExecTree(object):
 						.format(self.name)
 					)
 			except gevent.timeout.Timeout:
-				logging.warning("Execution of tree exceeded time limit ({0} seconds).".format(timeout))
+				logging.warning("Execution of tree exceeded time limit ({0} seconds)."
+					.format(timeout)
+				)
 				self.cancel()
 				return
 
@@ -1140,4 +1200,3 @@ class ExecTree(object):
 			job.arguments.extend(args)
 		for subtree in self.subtrees:
 			subtree.extend_args(args)
-
