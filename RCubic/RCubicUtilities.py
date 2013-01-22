@@ -27,6 +27,10 @@ import gevent
 import logging
 from gevent import (event, server, socket)
 
+class VersionCompareError(RuntimeError):
+    pass
+
+
 def popenNonblock(args, data='', stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, cwd=None, logFile=None):
 	"""Communicate with the process non-blockingly.
 
@@ -100,6 +104,9 @@ class FatalRuntimeError(Exception):
 	def __str__(self):
 		return repr(self.value)
 
+class VersionCompareError(Exception):
+	pass
+
 class LogToDB(object):
 	def __init__(self, dbPath):
 		self.dbPath = dbPath
@@ -146,7 +153,14 @@ class LogToDB(object):
 		query = "SELECT version FROM events WHERE groupe = ? AND JOB = ? AND status = ? ORDER BY time DESC LIMIT 1"
 		rows = list(self.conn.execute(query, (group, 'NONE', successStatus)))
 		if rows:
-			return self.verComp(version, rows[0][0]) > 0
+			try:
+				return self.verComp(version, rows[0][0]) > 0
+			except VersionCompareError:
+				logging.warning(
+					"Versions ({0}, {1}) cannot be compared due to format error for group {2}."
+					.format(version, rows[0][0], group)
+				)
+				return True
 		else:
 			return True
 
@@ -204,8 +218,11 @@ class LogToDB(object):
 			b[0].append(0)
 
 		for a1, b1 in zip(a[0], b[0]):
-			a1 = int(a1)
-			b1 = int(b1)
+			try:
+				a1 = int(a1)
+				b1 = int(b1)
+			except ValueError:
+				raise VersionCompareError("Integer conversion failure")
 			if a1 == b1:
 				continue
 			elif a1 > b1:
