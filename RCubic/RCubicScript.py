@@ -342,12 +342,13 @@ class RCubicScriptParser(object):
 					d = tree.add_dep(dep, script.job)
 				d.color = {"defined":"lawngreen", "undefined":"palegreen"}
 			for cdep in self._glob_expand(script.cdep):
+				#logging.debug("adding dep to ")
 				try:
-					d = tree.add_dep(script.job, dep)
+					d = tree.add_dep(script.job, cdep)
 				except exectree.JobUndefinedError:
-					dep = exectree.ExecJob(dep, "-", mustcomplete=False)
-					tree.add_job(dep)
-					d = tree.add_dep(script.job, dep)
+					cdep = exectree.ExecJob(cdep, "-", mustcomplete=False)
+					tree.add_job(cdep)
+					d = tree.add_dep(script.job, cdep)
 				d.color = {"defined":"lawngreen", "undefined":"palegreen"}
 			#stems = self.tree.stems()
 			for pdep in self.scripts():
