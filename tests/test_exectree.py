@@ -152,11 +152,10 @@ class TestET(unittest.TestCase):
         """ Cycle detection """
         self.tree.add_dep(self.job2, self.job3)
         self.tree.add_dep(self.job3, self.job2)
-        job4 = self._newjob("fiz", self.tree)
         #graph = self.tree.dot_graph()
         #graph.write_png("/tmp/et1.png")
         #stems = self.tree.stems()
-        #print("stems: {0}".format([stem.name for stem in stems]))
+        #logging.debug("stems: {0}".format([stem.name for stem in stems]))
         self.assertNotEqual(self.tree.validate(), [])
 
     def test_validation(self, tree=None):

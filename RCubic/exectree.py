@@ -1153,8 +1153,6 @@ class ExecTree(object):
         if job not in visited:
             visited.append(job)
         for child in job.children():
-            if child in visited:
-                continue
             if not self.validate_nocycles(child, visited, parents):
                 return False
         parents.remove(job)
