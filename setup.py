@@ -29,10 +29,10 @@ for scheme in INSTALL_SCHEMES.values():
     scheme['data'] = scheme['purelib']
 
 setup(name = 'RCubic',
-      version = '1.0',
+      version = '1.1',
       description = 'RCubic',
       # Required packages
-      requires = ['MiniREST', 'lxml', 'simplejson'],
+      requires = ['MiniREST', 'lxml', 'simplejson', 'pydot', 'gevent'],
       # List what we provide and obolete for updates
       provides = ['RCubic'],
       obsoletes = ['RCubic'],
@@ -46,12 +46,22 @@ setup(name = 'RCubic',
       data_files = [
           ('RCubic/', [ "RCubic/rcubic.xml.template" ]),
           ('RCubic/web/', [ "RCubic/web/index.html" ]),
+          ('RCubic/web/archive/', ["RCubic/web/archive/index.html"]),
+          ('RCubic/web/', [
+              "RCubic/web/index.html",
+              "RCubic/web/archive.html"
+              ]),
           ('RCubic/web/css/', [
-            "RCubic/web/css/jquery.qtip.min.css" ]),
+            "RCubic/web/css/jquery.qtip.min.css",
+            "RCubic/web/css/select2.css",
+            "RCubic/web/css/select2.png",
+            "RCubic/web/css/select2x2.png",
+            "RCubic/web/css/spinner.gif"]),
           ('RCubic/web/css/syntax/', [
             "RCubic/web/css/syntax/shCore.css",
             "RCubic/web/css/syntax/shCoreFadeToGrey.css"]),
           ('RCubic/web/js/', [
+            "RCubic/web/js/select2.js",
             "RCubic/web/js/jquery.min.js",
             "RCubic/web/js/jquery.ui.min.js",
             "RCubic/web/js/jquery.qtip.min.js"]),

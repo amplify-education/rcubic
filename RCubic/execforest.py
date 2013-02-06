@@ -20,6 +20,13 @@
 #OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 #THE SOFTWARE.
 
-class Status(dict):
-	all = ("NONE", "BLOCKED", "QUEUED", "STARTED", "SUCCEEDED", "FAILED", "CANCELLED", "MANUALOVERRIDE")
-	NONE, BLOCKED, QUEUED, STARTED, SUCCEEDED, FAILED, CANCELLED, MANUALOVERRIDE = all
+import uuid
+import pydot
+
+class ExecForest:
+	def __init__(self):
+		#todo enforce that we only have one forest
+		self.trees = []
+
+	def add_tree(self, tree):
+		self.trees.append(tree)

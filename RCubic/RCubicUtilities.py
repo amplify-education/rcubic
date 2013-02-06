@@ -26,7 +26,6 @@ import sqlite3
 import gevent
 import logging
 from gevent import (event, server, socket)
-from ScriptStatus import Status
 
 class VersionCompareError(RuntimeError):
     pass
@@ -140,8 +139,8 @@ class LogToDB(object):
 		except:
 			raise FatalRuntimeError("Unsupported db_version. Please migrate")
 
-	def saveStatus(self, group, version, status, githead=None, job=Status.NONE):
-		if job.upper() == Status.NONE:
+	def saveStatus(self, group, version, status, githead=None, job="NONE"):
+		if job.upper() == "NONE":
 			job = job.upper()
 		timestamp = int(time.time())
 		self.conn.execute("INSERT OR REPLACE INTO events VALUES (?,?,?,?,?,?)", (timestamp, group, version, githead, str(job), status))
@@ -149,10 +148,10 @@ class LogToDB(object):
 		self.conn.commit()
 		return True
 
-	def isNewestVersion(self, group, version):
+	def isNewestVersion(self, group, version, successStatus):
 		"""Check if the latest group entry with status SUCCEEDED and job NONE is newer than version."""
 		query = "SELECT version FROM events WHERE groupe = ? AND JOB = ? AND status = ? ORDER BY time DESC LIMIT 1"
-		rows = list(self.conn.execute(query, (group, 'NONE', Status.SUCCEEDED)))
+		rows = list(self.conn.execute(query, (group, 'NONE', successStatus)))
 		if rows:
 			try:
 				return self.verComp(version, rows[0][0]) > 0
