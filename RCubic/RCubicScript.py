@@ -31,6 +31,10 @@ from lxml import etree
 import subprocess
 
 
+class ConfigurationError(Exception):
+	pass
+
+
 class RCubicScript(object):
 	def __init__(self, filepath, version, override, phase, logdir, whitelist, blacklist, regexval, group):
 		self.path = filepath
@@ -97,43 +101,39 @@ class RCubicScript(object):
 		return retVal
 
 class RCubicGroup(object):
-	def __init__(self, name="", phase=0, version=None, autoadd=False, element=None):
-		if element is not None:
-			try:
-				version = element.attrib["version"]
-				name = element.attrib["group"]
-			except KeyError:
-				raise ConfigurationError(
-					"Element on line %i of %s is missing version or group attributes."
-					%(element.sourceline, element.base)
-				)
+	def __init__(self, element):
+		try:
+			self.version = element.attrib["version"]
+			self.name = element.attrib["group"]
+		except KeyError:
+			raise ConfigurationError(
+				"Element on line %i of %s is missing version or group attributes."
+				%(element.sourceline, element.base)
+			)
 
-			try:
-				phase = RCubicScriptParser.PHASES[
-					element.attrib.get("phase", "DEFAULT").upper()
-				]
-			except:
-				raise ConfigurationError(
-					"Attribute phase on line %i of %s has unrecognized value: '%s'."
-					%(element.sourceline, element.base, phase)
-				)
+		try:
+			self.phase = RCubicScriptParser.PHASES[
+				element.attrib.get("phase", "DEFAULT").upper()
+			]
+		except:
+			raise ConfigurationError(
+				"Attribute phase on line %i of %s has unrecognized value: '%s'."
+				%(element.sourceline, element.base, self.phase)
+			)
 
-			fulloverride = element.attrib.get("fullOverride", "False").lower()
-			if fulloverride not in ["true", "false"]:
+		def booler(element, attrib, default):
+			value = element.attrib.get(attrib, default).lower()
+			if value not in ["true", "false"]:
 				raise ConfigurationError(
-					"Element fullOverride is not (True|False) on line %i of %s."
-					%(element.sourceline, element.base)
+					"Attribute {0} is not (true|false) on line {1} of {2}."
+					.format(attrib, element.sourceline, element.base)
 				)
-			else:
-				fulloverride = fulloverride == "true"
-		else:
-			fulloverride = False
-		self.name = name
-		self.phase = phase
-		self.version = version
-		self.autoadd = autoadd
+			return value == "true"
+
+		self.autoselect = booler(element, "autoSelect", "true")
+		self.fulloverride = booler(element, "fullOverride", "false")
+		self.forceselect = False
 		self.scripts = []
-		self.fulloverride = fulloverride
 
 	def __str__(self):
 		return self.name

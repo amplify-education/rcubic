@@ -59,8 +59,8 @@ from email.mime.text import MIMEText
 from RCubic.RESTCommunicator import RESTCommunicator
 #from RCubic.ResourceScheduler import ResourceScheduler
 #from RCubic.ReleaseScript import Status, ReleaseScriptManager, ReleaseScript
-from RCubic.RCubicScript import RCubicScript, RCubicGroup, RCubicScriptParser
-from RCubic.RCubicUtilities import popenNonblock, ConfigurationError, FatalRuntimeError, LogToDB
+from RCubic.RCubicScript import RCubicScript, RCubicGroup, RCubicScriptParser, ConfigurationError
+from RCubic.RCubicUtilities import popenNonblock, FatalRuntimeError, LogToDB
 from RCubic.daemon import Daemon
 from RCubic import exectree
 #######
@@ -216,9 +216,9 @@ class Rcubic(object):
 
 		group = None
 		for group in self.groups:
-			if group.autoadd == False:
+			if group.forceselect == False:
 				break
-		if group is None or  group.autoadd != False:
+		if group is None or  group.forceselect != False:
 			raise ConfigurationError("ERROR: No groups selected for installation")
 
 		egroups = []
@@ -470,12 +470,16 @@ class Rcubic(object):
 		for element in self.etree.xpath("/rcubic/release/install"):
 			rg = RCubicGroup(element=element)
 			if rg.name in self.config["specialGroups"]:
-				rg.autoadd = True
+				rg.forceselect = True
 				groups.append(rg)
 			elif rg.name in groupselect:
 				groups.append(rg)
 			elif len(groupselect) == 0:
-				if self.log.isNewestVersion(rg.name, rg.version, exectree.ExecJob.STATE_SUCCESSFULL):
+				if not rg.autoselect:
+					logging.info(
+						"Skipping %s autoselection is disabled." % (rg.name)
+					)
+				elif self.log.isNewestVersion(rg.name, rg.version, exectree.ExecJob.STATE_SUCCESSFULL):
 					groups.append(rg)
 				else:
 					logging.info(
