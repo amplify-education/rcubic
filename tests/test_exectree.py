@@ -1,5 +1,5 @@
 #!/usr/bin/python
-# vim: ts=4 et filetype=python
+# vim: ts=4 et sts filetype=python
 # This file is part of RCubic
 #
 #Copyright (c) 2012 Wireless Generation, Inc.

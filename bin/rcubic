@@ -44,8 +44,6 @@ import random
 import signal
 import sqlite3
 import os.path
-import smtplib
-import collections
 import logging
 import fnmatch
 import uuid
@@ -54,15 +52,13 @@ import simplejson
 import functools
 import traceback
 
-from email.mime.text import MIMEText
 #######
 from RCubic.RESTCommunicator import RESTCommunicator
-#from RCubic.ResourceScheduler import ResourceScheduler
-#from RCubic.ReleaseScript import Status, ReleaseScriptManager, ReleaseScript
 from RCubic.RCubicScript import RCubicScript, RCubicGroup, RCubicScriptParser, ConfigurationError
 from RCubic.RCubicUtilities import popenNonblock, FatalRuntimeError, LogToDB
 from RCubic.daemon import Daemon
 from RCubic import exectree
+from RCubic.RCubicNotification import RCubicNotification
 #######
 
 #third party libraries:
@@ -70,56 +66,6 @@ from lxml import etree
 import gevent
 from gevent import (event, server, socket)
 
-class RcubicNotification(object):
-	def __init__(self):
-		self.email = {}
-		self.enabled = True
-		self.emailFrom = 'RcubicNotify@example.com'
-		self.subject = "Rcubic:"
-		self.server = "localhost"
-		self.queue = collections.deque()
-		self.cc = ""
-
-	def disable(self):
-		if self.enabled == True:
-			logging.debug("Notifications have been disabled.")
-		self.enabled = False
-
-	def addProductEmail(self, product, email):
-		self.email[product.lower()] = email
-
-	def isProductConfigured(self, product):
-		return product in self.email
-
-	def notifyProduct(self, products, subject, message):
-		if self.enabled:
-			self.queue.append((products, subject, message))
-		else:
-			logging.debug("Notification skipped: {0}, {1}, {2}"
-				.format(products, subject, message)
-			)
-
-	def _processMessage(self, products, subject, message):
-		msg = MIMEText(message)
-		recipients = [self.email[prod] for prod in products]
-		recipients.append(self.cc)
-		msg['Subject'] = "%s %s %s" %(self.subject, ", ".join(products), subject)
-		msg['From'] = self.emailFrom
-		msg['To'] = ', '.join(recipients)
-		try:
-			smtp = smtplib.SMTP(self.server)
-			smtp.sendmail(self.emailFrom, recipients, msg.as_string())
-			smtp.quit()
-		except:
-			logging.error("Sending email failed! Message: %s" % msg)
-
-	def processQueue(self):
-		try:
-			while True:
-				self._processMessage(*self.queue.popleft())
-		except IndexError:
-			#queue is empty
-			pass
 
 class Rcubic(object):
 	def __init__(self, opts):
@@ -128,7 +74,6 @@ class Rcubic(object):
 		self.log = None
 		self.config = {}
 		self.port = 0
-		self.notification = RcubicNotification()
 		self.scriptDir = ""
 		self.scriptOverrideDir = ""
 		self.gitDir = ""
@@ -165,7 +110,11 @@ class Rcubic(object):
 		elif "environment" in self.config:
 			self.environment = self.config["environment"]
 
-		self._initNotification()
+		self.notification = RCubicNotification(self.config["emailFrom"],
+			self.config["emailSubjectPrefix"], self.config["smtpServer"],
+			self.config.get("cc", ""))
+		if self.opts.foreground or self.config.get("notification", "True") == "False":
+			self.notification.disable()
 
 		if self.opts.sessionMode:
 			self.log = LogToDB(":memory:")
@@ -257,8 +206,13 @@ class Rcubic(object):
 		if self.environment not in self.config["environmentOptions"]:
 			errors.append("environmentOptions: %s" %self.config["environmentOptions"])
 
-		if not self._verifyNotificationGroups():
-			errors.append("No notification configured. This is a bad thing")
+		ngroups = [ prd for scr in self.rsp.scripts() for prd in scr.products ]
+		errngroups = self.notifications.has_groups(ngroups)
+		if len(errngroups) > 0:
+			errors.append(
+				"No matching configuration for notification group(s): {0}."
+				.format(" ".join(errngroups))
+			)
 
 		if len(errors) > 0:
 			logging.error("Errors detected")
@@ -266,15 +220,6 @@ class Rcubic(object):
 				logging.error(error)
 			raise ConfigurationError("Errors:\n {0}".format("\n".join(errors)))
 
-	def _initNotification(self):
-		self.notification.emailFrom = self.config["emailFrom"]
-		self.notification.subject = self.config["emailSubjectPrefix"]
-		self.notification.server = self.config["smtpServer"]
-		self.notification.cc = self.config.get("cc", "")
-		if self.opts.foreground:
-			self.notification.disable()
-		if self.config.get("notification", "True") == "False":
-			self.notification.disable()
 
 	def _initGit(self):
 		#TODO: this will fail if called multiple times in session mode.
@@ -506,21 +451,12 @@ class Rcubic(object):
 		count = 0
 		for product in self.etree.xpath("/rcubic/notification/product"):
 			try:
-				self.notification.addProductEmail(product.attrib["name"], product.attrib["email"])
+				self.notification.add_email(product.attrib["name"], product.attrib["email"])
 			except KeyError:
 				logging.error("Element on line %i of %s is missing an attribute." %(product.sourceline, product.base))
 				return 0
 			count += 1
 		return count
-
-	def _verifyNotificationGroups(self):
-		exit = True
-		for rs in self.rsp.scripts():
-			for product in rs.products:
-				if not self.notification.isProductConfigured(product):
-					exit = False
-					logging.error("'%s' references notification group '%s' which is not defined" %(rs.name, product))
-		return exit
 
 	def reschedule(self, scriptName):
 		trees = list(self.tree.subtrees)
@@ -622,13 +558,13 @@ class Rcubic(object):
 			self.tree.cancel()
 
 		if rs.job.is_failed():
-			self.notification.notifyProduct(
+			self.notification.send(
 				rs.products,
 				"%s (%s) failed" %(rs.name, rs.version),
 				rs.job.read_log(1024 * int(self.config['maxEmailLogSizeKB']))
 			)
 		elif rs.job.failcount > 1 and rs.job.is_success():
-			self.notification.notifyProduct(
+			self.notification.send(
 				rs.products,
 				"%s (%s) recovered" %(rs.name, rs.version),
 				"The script %s which has previously failed has now succeeded." % rs.name
@@ -706,7 +642,6 @@ class Rcubic(object):
 		self.tree.spawn_json_updater(self.config["njsonFile"])
 		self.tree.run(timeout=self.config["jobExpireTime"]*60*60)
 		self._updateGraph(updateDot=True)
-		self.notification.processQueue()
 		self.communicator.stop()
 
 		self.cleanup()
