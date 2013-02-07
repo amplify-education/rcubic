@@ -533,7 +533,7 @@ class Rcubic(object):
 		self.tree.write_status(self.config["asvgFile"], self.config["njsonFile"], updateDot)
 
 	def _updateProgress(self, scriptName, version, kind, message):
-		rs = self.rsm.find(scriptName)
+		rs = self.tree.find_job(scriptName)
 		if not rs:
 			logging.error("received message with unmatched script. (%s, %s)" %(scriptName, version))
 			return False
