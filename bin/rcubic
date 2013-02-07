@@ -34,27 +34,20 @@ from __future__ import print_function
 import sys
 import os
 import re
-import errno
-import fcntl
 import subprocess
 import time
 import argparse
-import threading
-import random
 import signal
-import sqlite3
 import os.path
 import logging
-import fnmatch
 import uuid
 import shutil
-import simplejson
 import functools
 import traceback
 
 #######
 from RCubic.RESTCommunicator import RESTCommunicator
-from RCubic.RCubicScript import RCubicScript, RCubicGroup, RCubicScriptParser, ConfigurationError
+from RCubic.RCubicScript import RCubicGroup, RCubicScriptParser, ConfigurationError
 from RCubic.RCubicUtilities import popenNonblock, FatalRuntimeError, LogToDB
 from RCubic.daemon import Daemon
 from RCubic import exectree
@@ -63,8 +56,6 @@ from RCubic.RCubicNotification import RCubicNotification
 
 #third party libraries:
 from lxml import etree
-import gevent
-from gevent import (event, server, socket)
 
 
 class Rcubic(object):
@@ -86,7 +77,7 @@ class Rcubic(object):
 						  "environmentOptions", "specialGroups",
 						  "listenAddress", "listenPortRange", "jobExpireTime",
 						  "smtpServer", "emailSubjectPrefix", "emailFrom", "maxEmailLogSizeKB",
-						  "defaultRelease", "hijackPoint", "SSLKey", "SSLCert", "token"]
+						  "defaultRelease", "SSLKey", "SSLCert", "token"]
 		splitOptions = ["specialGroups"]
 
 		configpaths = [ sys.argv[0][0:sys.argv[0].rindex("/")],
@@ -133,7 +124,6 @@ class Rcubic(object):
 		)
 		self.rsp.read_dirs(self.scriptDir)
 		self.rsp.read_dirs(self.scriptOverrideDir, True)
-
 		self.rsp.set_href(self.config["gerritURL"], self.config["gerritProject"], self.gitHead, self.gitDir)
 
 		self.tree = self.rsp.init_tree()
@@ -161,7 +151,6 @@ class Rcubic(object):
 		which are not immediatelly fatal get appended to errors
 		and raised all at once."""
 		errors = []
-
 
 		group = None
 		for group in self.groups:
@@ -195,7 +184,7 @@ class Rcubic(object):
 		if not self.environment:
 			errors.append("Environment not not specified.")
 
-		self._updateGraph(updateDot=True)
+		self.tree.write_status(self.config["asvgFile"], self.config["njsonFile"], True)
 
 		errors.extend(self.tree.validate())
 
@@ -325,9 +314,9 @@ class Rcubic(object):
 			self.fullURL = "%s?prefix=%s/%s/work" %(self.baseURL, self.pathURL, workpath)
 			logging.info("URL: %s" % self.fullURL)
 
-		fileMap = { "fdotFile":"full.dot", "fpngFile":"full.png", "adotFile":"arb.dot",
-					"asvgFile":"arb.svg", "pidFile":"rcubic.pid", "logFile":"rcubic.log",
-					"auditLog":"rcubic.aud" , "njsonFile": "nodes.json"}
+		fileMap = { "asvgFile":"arb.svg", "pidFile":"rcubic.pid",
+			"logFile":"rcubic.log",	"auditLog":"rcubic.aud",
+			"njsonFile":"nodes.json" }
 		for k, v in fileMap.iteritems():
 			self.config[k] = "%s/work/%s" %(self.config["basePath"], v)
 
@@ -529,9 +518,6 @@ class Rcubic(object):
 		else:
 			return errorMessages
 
-	def _updateGraph(self, updateDot=False):
-		self.tree.write_status(self.config["asvgFile"], self.config["njsonFile"], updateDot)
-
 	def _updateProgress(self, scriptName, version, kind, message):
 		rs = self.tree.find_job(scriptName)
 		if not rs:
@@ -624,7 +610,7 @@ class Rcubic(object):
 		except OSError:
 			pass
 
-		self._updateGraph()
+		self.tree.write_status(self.config["asvgFile"], self.config["njsonFile"], False)
 		if self.config["SSLKey"] == "" or self.config["SSLCert"] == "":
 			self.config["SSLKey"] = None
 			self.config["SSLCert"] = None
@@ -641,7 +627,7 @@ class Rcubic(object):
 		self.tree.extend_args([self.environment, `self.port`, `self.port`])
 		self.tree.spawn_json_updater(self.config["njsonFile"])
 		self.tree.run(timeout=self.config["jobExpireTime"]*60*60)
-		self._updateGraph(updateDot=True)
+		self.tree.write_status(self.config["asvgFile"], self.config["njsonFile"], True)
 		self.communicator.stop()
 
 		self.cleanup()
