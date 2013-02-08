@@ -1173,6 +1173,10 @@ class ExecTree(object):
         self.done = True
         return True
 
+    def failed_jobs(self):
+        """Return list of jobs that are failed"""
+        return [job for job in self.jobs if job.is_failed()]
+
     def is_success(self):
         """ True if all the jobs in tree have successfully executed """
         for job in self.jobs:
