@@ -196,7 +196,7 @@ class Rcubic(object):
 			errors.append("environmentOptions: %s" %self.config["environmentOptions"])
 
 		ngroups = [ prd for scr in self.rsp.scripts() for prd in scr.products ]
-		errngroups = self.notifications.has_groups(ngroups)
+		errngroups = self.notification.has_groups(ngroups)
 		if len(errngroups) > 0:
 			errors.append(
 				"No matching configuration for notification group(s): {0}."
