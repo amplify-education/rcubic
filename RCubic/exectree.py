@@ -691,14 +691,17 @@ class ExecResource(object):
         if self.used < self.avail:
             self.used += 1
         elif blocking:
-            try:
-                with gevent.Timeout(timeout):
+            with gevent.Timeout(timeout) as tobject:
+                try:
                     while self.used >= self.avail:
                         if self.event.wait(1):
                             self.event.clear()
                     self.used += 1
-            except gevent.timeout.Timeout:
-                return False
+                except gevent.timeout, timeout:
+                    if tobject != timeout:
+                        raise
+                    return False
+
         else:
             return False
         return True
@@ -801,6 +804,7 @@ class ExecTree(object):
             self.cwd = "/"
             self.workdir = "/tmp/{0}".format(self.uuid)
             self.iterator = None
+            self.waitsuccess = False
         else:
             if xml.tag != "execTree":
                 raise XMLError("Expect to find execTree in xml.")
@@ -810,6 +814,9 @@ class ExecTree(object):
             self.href = xml.attrib.get("href", "")
             self.uuid = uuid.UUID(xml.attrib["uuid"])
             self.cwd = xml.attrib.get("cwd", "/")
+            self.waitsuccess = (
+                not xml.attrib.get("waitsuccess", "False") == "False"
+            )
             for xmlres in xml.findall("execResource"):
                 ExecResource(self, xml=xmlres)
             for xmlsubtree in xml.findall("execTree"):
@@ -847,7 +854,8 @@ class ExecTree(object):
             "name": self.name,
             "href": self.href,
             "uuid": self.uuid.hex,
-            "cwd": self.cwd
+            "cwd": self.cwd,
+            "waitsuccess": str(self.waitsuccess),
         }
         eti = et.Element("execTree", args)
         for job in self.jobs:
@@ -1165,6 +1173,9 @@ class ExecTree(object):
         """ True if all jobs in tree have completed execution """
         for job in self.jobs:
             if job.mustcomplete:
+                if self.waitsuccess and not job.is_success():
+                    logging.debug("{0} is not successfull".format(job.name))
+                    return False
                 if not job.is_done():
                     logging.debug("{0} is not done".format(job.name))
                     return False
@@ -1202,8 +1213,8 @@ class ExecTree(object):
             job.start()
         self.started = True
         if blocking:
-            try:
-                with gevent.Timeout(timeout):
+            with gevent.Timeout(timeout) as timeout:
+                try:
                     logging.debug(
                         "Jobs have been spun up for {0}. I'm gonna chill"
                         .format(self.name)
@@ -1218,13 +1229,15 @@ class ExecTree(object):
                         "Tree {0} has finished execution."
                         .format(self.name)
                     )
-            except gevent.timeout.Timeout:
-                logging.warning(
-                    "Execution of tree exceeded time limit ({0} seconds)."
-                    .format(timeout)
-                )
-                self.cancel()
-                return
+                except gevent.timeout.Timeout, tobject:
+                    if tobject != timeout:
+                        raise
+                    logging.warning(
+                        "Execution of tree exceeded time limit ({0} seconds)."
+                        .format(timeout)
+                    )
+                    self.cancel()
+                    return
 
     #TODO make event based
     def _json_updater(self, path):

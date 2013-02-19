@@ -130,6 +130,7 @@ class Rcubic(object):
 		self.tree.legend["time"] = time.strftime("%Y-%m-%d %H:%M:%S")
 		self.tree.legend["version"] = self.opts.release
 		self.tree.legend["environment"] = self.environment
+		self.tree.waitsuccess = not self.opts.sessionMode
 
 		for script in self.rsp.scripts():
 			for e in script.job.DONE_STATES:
@@ -637,7 +638,7 @@ class Rcubic(object):
 			return False
 		if not self.tree.is_success():
 			logging.error("Following jobs have failed: {0}."
-				.format(" ".join(self.tree.failed_jobs())))
+				.format(" ".join([j.name for j in self.tree.failed_jobs()])))
 			return False
 		return True
 

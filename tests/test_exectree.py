@@ -103,7 +103,7 @@ class TestET(unittest.TestCase):
         return job
 
     def test_graph(self, tree=None, target=None):
-        """ Generate and render graph """
+        """Generate and render graph"""
         if tree == None:
             tree = self.tree
         graph = tree.dot_graph()
@@ -119,7 +119,7 @@ class TestET(unittest.TestCase):
 
 
     def test_multistem(self):
-        """ multistem detection """
+        """multistem detection"""
         self.assertEqual(self.tree.validate(), [])
         job4 = self._newjob("fiz", self.tree)
         job5 = self._newjob("buz", self.tree)
@@ -143,13 +143,13 @@ class TestET(unittest.TestCase):
 
 
     def test_own_parent(self):
-        """ Detect bootstrap paradox """
+        """Detect bootstrap paradox"""
         self.assertRaises(
             exectree.DependencyError, self.tree.add_dep, self.job1, self.job1
         )
 
     def test_cycles(self):
-        """ Cycle detection """
+        """Cycle detection"""
         self.tree.add_dep(self.job2, self.job3)
         self.tree.add_dep(self.job3, self.job2)
         #graph = self.tree.dot_graph()
@@ -159,13 +159,13 @@ class TestET(unittest.TestCase):
         self.assertNotEqual(self.tree.validate(), [])
 
     def test_validation(self, tree=None):
-        """ Validate a tree """
+        """Validate a tree"""
         if tree is None:
             tree = self.tree
         self.assertEqual(tree.validate(), [])
 
     def test_unreachable_job(self):
-        """ Unconnected job detection """
+        """Unconnected job detection"""
         self.assertEqual(self.tree.validate(), [])
         job4 = self._newjob("fiz", self.tree)
         job5 = self._newjob("buz", self.tree)
@@ -180,7 +180,7 @@ class TestET(unittest.TestCase):
 
 
     def test_xml(self, tree=None):
-        """ xml export import export match """
+        """xml export import export match"""
         if tree is None:
             tree = self.tree
 
@@ -201,7 +201,7 @@ class TestET(unittest.TestCase):
         self.assertEqual(xmlstr1, xmlstr2)
 
     def test_execjob_nofile(self):
-        """ Validates error on no job file"""
+        """Validates error on no job file"""
         self.assertEqual(self.tree.validate(), [])
         job4 = self._newjob("yut", self.tree, vfile=False)
         self.tree.add_dep(self.job3, job4)
@@ -209,7 +209,7 @@ class TestET(unittest.TestCase):
 
 
     def test_execjob_noexec(self):
-        """ Validates error on unexecutable job file"""
+        """Validates error on unexecutable job file"""
         self.assertEqual(self.tree.validate(), [])
         job4 = self._newjob("fet", self.tree, vexec=False)
         self.tree.add_dep(self.job3, job4)
@@ -226,7 +226,7 @@ class TestET(unittest.TestCase):
         self.test_graph()
 
     def test_subtree(self):
-        """ Test ExecTree subtrees """
+        """Test ExecTree subtrees"""
         ltree = exectree.ExecTree()
         ltree.name = "local tree"
         ljob1 = self._newjob("yup", ltree)
@@ -263,21 +263,21 @@ class TestET(unittest.TestCase):
         self.assertTrue(self.tree.is_done())
 
     def test_crosstree_dep(self):
-        """ Detect dependencies between jobs in different trees """
+        """Detect dependencies between jobs in different trees"""
         ltree = exectree.ExecTree()
         job4 = self._newjob("lop", ltree)
         with self.assertRaises(exectree.JobUndefinedError):
             self.tree.add_dep(self.job3, job4)
 
     def test_execution(self):
-        """ Run tree and check all jobs finish """
+        """Run tree and check all jobs finish"""
         with gevent.Timeout(10):
             self.tree.run()
         self.assertTrue(self.tree.is_done())
 
 
     def test_incomplete_tree(self):
-        """ Run tree with failed and sans mustcomplete jobs """
+        """Run tree with failed and sans mustcomplete jobs"""
         job4 = self._newjob("war", self.tree, exitcode=1, maxsleep=0)
         job4.mustcomplete = False
 
@@ -303,7 +303,7 @@ class TestET(unittest.TestCase):
         self.ljob1_count += 1
 
     def test_treetarator(self):
-        """ Run trees with itterated subtrees """
+        """Run trees with itterated subtrees"""
 
         ltree = exectree.ExecTree()
         ltree.name = "local tree"
@@ -348,7 +348,7 @@ class TestET(unittest.TestCase):
         self.test_graph(target="{0}/cyt.png".format(self.workdir))
 
     def test_resource_validation(self):
-        """ Resource validation """
+        """Resource validation"""
         resource = exectree.ExecResource(self.tree, "test", 1)
         self.job1.resources.append(resource)
         self.assertEqual(self.tree.validate(), [])
@@ -359,7 +359,7 @@ class TestET(unittest.TestCase):
         times[state] = time.time()
 
     def test_resource_use(self):
-        """ Run tree with resources """
+        """Run tree with resources"""
         resource = exectree.ExecResource(self.tree, "r3", 1)
         times = {}
         jobs = [self.job2, self.job3]
@@ -400,7 +400,7 @@ class TestET(unittest.TestCase):
                 )
 
     def test_fail_reschedule_succeed(self):
-        """ Reschedule failed job """
+        """Reschedule failed job"""
         tfd, tpath = tempfile.mkstemp(dir=self.workdir)
         os.close(tfd)
 
@@ -413,7 +413,7 @@ class TestET(unittest.TestCase):
 
         self._logfile_init(job4)
 
-        with gevent.Timeout(10):
+        with gevent.Timeout(20):
             self.tree.run(blocking=False)
             logging.debug("Tree started, waiting for failure")
             logging.debug("dirs before: {0}".format(os.listdir(self.workdir)))
@@ -434,6 +434,41 @@ class TestET(unittest.TestCase):
     def test_colors(self):
         for state in self.job1.STATES:
             self.assertTrue(state in self.job1.STATE_COLORS)
+
+    def _waitsuccess(self):
+        append = "exit 1\n"
+        job4 = self._newjob("qor", self.tree, append=append)
+
+        self.tree.add_dep(self.job3, job4)
+        self.tree.add_dep(self.job2, job4)
+
+        with gevent.Timeout(15) as timeout:
+            try:
+                self.tree.run()
+            except gevent.timeout.Timeout, tobject:
+                logging.debug("Caught a timeout")
+                if timeout != tobject:
+                    logging.debug("but its not ours")
+                    raise
+                return False
+        logging.debug("Our timeout is not captured")
+        return True
+
+    def test_noblock_on_fail(self):
+        """No block on failure witout waitsuccess"""
+        wfs = self._waitsuccess()
+        self.assertTrue(wfs)
+        self.assertTrue(self.tree.is_done())
+        self.assertFalse(self.tree.is_success())
+    
+
+    def test_block_on_fail(self):
+        """With waitsuccess ensure tree blocks on failure"""
+        self.tree.waitsuccess = True
+        wfs = self._waitsuccess()
+        self.assertFalse(wfs)
+        self.assertFalse(self.tree.is_done())
+        self.assertFalse(self.tree.is_success())
 
 
 if  __name__ == '__main__':
