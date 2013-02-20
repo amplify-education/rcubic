@@ -448,38 +448,6 @@ class Rcubic(object):
 			count += 1
 		return count
 
-	def reschedule(self, scriptName):
-		trees = list(self.tree.subtrees)
-		trees.append(self.tree)
-		for tree in trees:
-			job = tree.find_job(scriptName)
-			if job is not None:
-				break
-		if job is None:
-			logging.debug("Reschedule failed: job not found")
-			return False
-		if not job.is_failed():
-			logging.debug("Reschedule failed: job has not failed")
-			return False
-		job.reset()
-		return job.start()
-
-	def manualOverride(self, scriptName):
-		trees = list(self.tree.subtrees)
-		trees.append(self.tree)
-		for tree in trees:
-			job = tree.find_job(scriptName)
-			if job is not None:
-				break
-		if job is None:
-			logging.debug("Override failed: job not found")
-			return False
-		if job.state not in job.ERROR_STATES:
-			logging.debug("Override failed: job has not failed")
-			return False
-		job.state = job.STATE_SUCCESSFULL
-		return True
-
 	def validate(self):
 		errorMessages = ""
 
@@ -519,22 +487,36 @@ class Rcubic(object):
 		else:
 			return errorMessages
 
-	def _updateProgress(self, scriptName, version, kind, message):
-		rs = self.tree.find_job(scriptName)
-		if not rs:
-			logging.error("received message with unmatched script. (%s, %s)" %(scriptName, version))
+	def updateProgress(self, scriptName, progress):
+		job = self.tree.find_job_deep(scriptName)
+		if job is None:
+			logging.error("Progress update failed: job %s not found" %(scriptName))
 			return False
-		if rs.version != version:
-			logging.error("received message with unmatched version. (%s, %s)" %(scriptName, version))
-			return False
-		if kind == "PROGRESS":
-			if not rs.updateProgress(message):
-				logging.error("received message with invalid progress message. (%s, %s, %s)" %(scriptName, version, message))
-				return False
-		else:
-			logging.error("received message with unknown message type (%s)." %(kind))
-			return False
+		job.progress = progress
 		return True
+
+	def reschedule(self, scriptName):
+		job = self.tree.find_job_deep(scriptName)
+		if job is None:
+			logging.debug("Reschedule failed: job not found")
+			return False
+		if not job.is_failed():
+			logging.debug("Reschedule failed: job has not failed")
+			return False
+		job.reset()
+		return job.start()
+
+	def manualOverride(self, scriptName):
+		job = self.tree.find_job_deep(scriptName)
+		if job is None:
+			logging.debug("Override failed: job not found")
+			return False
+		if job.state not in job.ERROR_STATES:
+			logging.debug("Override failed: job has not failed")
+			return False
+		job.state = job.STATE_SUCCESSFULL
+		return True
+
 
 	def statusEventHandler(self, rs, event):
 		self.log.saveStatus(rs.group.name, rs.version, rs.job.state, self.gitHead, rs.job.name)

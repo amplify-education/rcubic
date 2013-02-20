@@ -45,7 +45,7 @@ def override(args):
 
 def progress(args):
 	client = RCubicClient(server=args.addr, port=args.port, CACert=args.cacert, token=args.token)
-	return client.progress(args.script, args.version, args.progress) == "True"
+	return client.progress(args.script, args.progress) == "True"
 
 def reschedule(args):
 	client = RCubicClient(server=args.addr, port=args.port, CACert=args.cacert, token=args.token)
@@ -73,7 +73,6 @@ parser_override.set_defaults(func=override)
 
 parser_progress = subparsers.add_parser('progress', help='Update RCubic with current progress')
 parser_progress.add_argument('--script', dest='script', required=True, help='Name of script to update', type=str)
-parser_progress.add_argument('--version', dest='version', default=None, help='Script version', type=str)
 parser_progress.add_argument('--progress', dest='progress', required=True, help='Progress value (0-100)', type=int)
 parser_progress.set_defaults(func=progress)
 

@@ -467,6 +467,7 @@ class ExecJob(object):
         """ Prepares jobs to be executed again """
         for key in self.events.iterkeys():
             self.events[key].clear()
+        self.progress = 0
         self.state = self.STATE_RESET
         logging.debug("job {0} has been reset.".format(self.name))
 
@@ -919,6 +920,17 @@ class ExecTree(object):
                 return job
         return default
 
+    def find_job_deep(self, needle, default=None):
+        """ Find job based on name or uuid, looks through subtrees """
+        trees = list(self.subtrees)
+        trees.append(self)
+        for tree in trees:
+            job = tree.find_job(needle)
+            if job is not None:
+                return job
+        return default
+
+
     def add_job(self, job):
         """ Add a job to tree"""
         if self.find_job(job.name):
@@ -1239,7 +1251,7 @@ class ExecTree(object):
                     self.cancel()
                     return
 
-    #TODO make event based
+    #TODO make event based: on job status change, progress change..
     def _json_updater(self, path):
         while not self._done:
             gevent.sleep(5)
