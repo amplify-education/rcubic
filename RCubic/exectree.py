@@ -277,10 +277,7 @@ class ExecJob(object):
             self._progress = value
 
     def _dot_node(self, font):
-        if self.progress >= 0:
-            label = "{0}\n{1}".format(self.name, self.progress)
-        else:
-            label = self.name
+        label = self.name
         kw = {
             "style": "filled",
             "fillcolor": self.STATE_COLORS[self.state],
@@ -1215,6 +1212,8 @@ class ExecTree(object):
             return
         for job in self.jobs:
             job.cancel()
+        for tree in self.subtrees:
+            tree.cancel()
 
     def run(self, blocking=True, timeout=None):
         """Schedule all jobs part of tree for execution."""
