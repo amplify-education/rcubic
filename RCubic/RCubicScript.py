@@ -72,7 +72,7 @@ class RCubicScript(object):
 			self.path="-"
 
 	def _get_param(self, script, field, default=None):
-		fieldre = re.compile("^[\s]*#%s:.*$" %(field), re.MULTILINE)
+		fieldre = re.compile("^#%s:.*$" %(field), re.MULTILINE)
 		begin = re.compile("^#[A-Z0-9]+:[\s]*")
 		line = fieldre.search(script)
 		if line:
