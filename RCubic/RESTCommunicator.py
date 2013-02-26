@@ -61,8 +61,8 @@ class RESTCommunicator(RESTServer):
 		env -- expects a 'data' list TODO: paramaters
 
 		"""
-		logging.debug("Received Progress report (%s) for %s: %s" %(post['kind'], post['scriptName'], post['message']))
-		resp = self.rcubic._updateProgress(post['scriptName'], post['version'], post['kind'], post['message'])
+		logging.debug("Received Progress report for %s: %s" %(post['scriptName'], post['message']))
+		resp = self.rcubic.updateProgress(post['scriptName'], post['message'])
 		start_response(responseCodes[200], responseTypes['plaintext'])
 		return str(resp)
 
@@ -131,7 +131,7 @@ class RESTCommunicator(RESTServer):
 		env -- doesn't expect any paramaters
 
 		"""
-		logging.info("Received reclone request")
+		logging.info("Received cancel request")
 		resp = self.rcubic.abort()
 		start_response(responseCodes[200], responseTypes['plaintext'])
 		return str(resp)

@@ -1,3 +1,4 @@
+# vim: ts=4 et filetype=python
 # This file is part of RCubic
 #
 #Copyright (c) 2012 Wireless Generation, Inc.
@@ -20,13 +21,14 @@
 #OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 #THE SOFTWARE.
 
-import uuid
-import pydot
 
 class ExecForest:
-	def __init__(self):
-		#todo enforce that we only have one forest
-		self.trees = []
+    """ExecForest is to be used as daemon to manage many exectrees"""
 
-	def add_tree(self, tree):
-		self.trees.append(tree)
+    def __init__(self):
+        #todo enforce that we only have one forest
+        self.trees = []
+
+    def add_tree(self, tree):
+        """Add a tree to the forest"""
+        self.trees.append(tree)

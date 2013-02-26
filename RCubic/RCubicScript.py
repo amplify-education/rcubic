@@ -31,6 +31,10 @@ from lxml import etree
 import subprocess
 
 
+class ConfigurationError(Exception):
+	pass
+
+
 class RCubicScript(object):
 	def __init__(self, filepath, version, override, phase, logdir, whitelist, blacklist, regexval, group):
 		self.path = filepath
@@ -68,7 +72,7 @@ class RCubicScript(object):
 			self.path="-"
 
 	def _get_param(self, script, field, default=None):
-		fieldre = re.compile("^[\s]*#%s:.*$" %(field), re.MULTILINE)
+		fieldre = re.compile("^#%s:.*$" %(field), re.MULTILINE)
 		begin = re.compile("^#[A-Z0-9]+:[\s]*")
 		line = fieldre.search(script)
 		if line:
@@ -97,43 +101,39 @@ class RCubicScript(object):
 		return retVal
 
 class RCubicGroup(object):
-	def __init__(self, name="", phase=0, version=None, autoadd=False, element=None):
-		if element is not None:
-			try:
-				version = element.attrib["version"]
-				name = element.attrib["group"]
-			except KeyError:
-				raise ConfigurationError(
-					"Element on line %i of %s is missing version or group attributes."
-					%(element.sourceline, element.base)
-				)
+	def __init__(self, element):
+		try:
+			self.version = element.attrib["version"]
+			self.name = element.attrib["group"]
+		except KeyError:
+			raise ConfigurationError(
+				"Element on line %i of %s is missing version or group attributes."
+				%(element.sourceline, element.base)
+			)
 
-			try:
-				phase = RCubicScriptParser.PHASES[
-					element.attrib.get("phase", "DEFAULT").upper()
-				]
-			except:
-				raise ConfigurationError(
-					"Attribute phase on line %i of %s has unrecognized value: '%s'."
-					%(element.sourceline, element.base, phase)
-				)
+		try:
+			self.phase = RCubicScriptParser.PHASES[
+				element.attrib.get("phase", "DEFAULT").upper()
+			]
+		except:
+			raise ConfigurationError(
+				"Attribute phase on line %i of %s has unrecognized value: '%s'."
+				%(element.sourceline, element.base, self.phase)
+			)
 
-			fulloverride = element.attrib.get("fullOverride", "False").lower()
-			if fulloverride not in ["true", "false"]:
+		def booler(element, attrib, default):
+			value = element.attrib.get(attrib, default).lower()
+			if value not in ["true", "false"]:
 				raise ConfigurationError(
-					"Element fullOverride is not (True|False) on line %i of %s."
-					%(element.sourceline, element.base)
+					"Attribute {0} is not (true|false) on line {1} of {2}."
+					.format(attrib, element.sourceline, element.base)
 				)
-			else:
-				fulloverride = fulloverride == "true"
-		else:
-			fulloverride = False
-		self.name = name
-		self.phase = phase
-		self.version = version
-		self.autoadd = autoadd
+			return value == "true"
+
+		self.autoselect = booler(element, "autoSelect", "true")
+		self.fulloverride = booler(element, "fullOverride", "false")
+		self.forceselect = False
 		self.scripts = []
-		self.fulloverride = fulloverride
 
 	def __str__(self):
 		return self.name
@@ -342,12 +342,13 @@ class RCubicScriptParser(object):
 					d = tree.add_dep(dep, script.job)
 				d.color = {"defined":"lawngreen", "undefined":"palegreen"}
 			for cdep in self._glob_expand(script.cdep):
+				#logging.debug("adding dep to ")
 				try:
-					d = tree.add_dep(script.job, dep)
+					d = tree.add_dep(script.job, cdep)
 				except exectree.JobUndefinedError:
-					dep = exectree.ExecJob(dep, "-", mustcomplete=False)
-					tree.add_job(dep)
-					d = tree.add_dep(script.job, dep)
+					cdep = exectree.ExecJob(cdep, "-", mustcomplete=False)
+					tree.add_job(cdep)
+					d = tree.add_dep(script.job, cdep)
 				d.color = {"defined":"lawngreen", "undefined":"palegreen"}
 			#stems = self.tree.stems()
 			for pdep in self.scripts():

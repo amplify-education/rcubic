@@ -34,92 +34,29 @@ from __future__ import print_function
 import sys
 import os
 import re
-import errno
-import fcntl
 import subprocess
 import time
 import argparse
-import threading
-import random
 import signal
-import sqlite3
 import os.path
-import smtplib
-import collections
 import logging
-import fnmatch
 import uuid
 import shutil
-import simplejson
 import functools
 import traceback
 
-from email.mime.text import MIMEText
 #######
 from RCubic.RESTCommunicator import RESTCommunicator
-#from RCubic.ResourceScheduler import ResourceScheduler
-#from RCubic.ReleaseScript import Status, ReleaseScriptManager, ReleaseScript
-from RCubic.RCubicScript import RCubicScript, RCubicGroup, RCubicScriptParser
-from RCubic.RCubicUtilities import popenNonblock, ConfigurationError, FatalRuntimeError, LogToDB
+from RCubic.RCubicScript import RCubicGroup, RCubicScriptParser, ConfigurationError
+from RCubic.RCubicUtilities import popenNonblock, FatalRuntimeError, LogToDB
 from RCubic.daemon import Daemon
 from RCubic import exectree
+from RCubic.RCubicNotification import RCubicNotification
 #######
 
 #third party libraries:
 from lxml import etree
-import gevent
-from gevent import (event, server, socket)
 
-class RcubicNotification(object):
-	def __init__(self):
-		self.email = {}
-		self.enabled = True
-		self.emailFrom = 'RcubicNotify@example.com'
-		self.subject = "Rcubic:"
-		self.server = "localhost"
-		self.queue = collections.deque()
-		self.cc = ""
-
-	def disable(self):
-		if self.enabled == True:
-			logging.debug("Notifications have been disabled.")
-		self.enabled = False
-
-	def addProductEmail(self, product, email):
-		self.email[product.lower()] = email
-
-	def isProductConfigured(self, product):
-		return product in self.email
-
-	def notifyProduct(self, products, subject, message):
-		if self.enabled:
-			self.queue.append((products, subject, message))
-		else:
-			logging.debug("Notification skipped: {0}, {1}, {2}"
-				.format(products, subject, message)
-			)
-
-	def _processMessage(self, products, subject, message):
-		msg = MIMEText(message)
-		recipients = [self.email[prod] for prod in products]
-		recipients.append(self.cc)
-		msg['Subject'] = "%s %s %s" %(self.subject, ", ".join(products), subject)
-		msg['From'] = self.emailFrom
-		msg['To'] = ', '.join(recipients)
-		try:
-			smtp = smtplib.SMTP(self.server)
-			smtp.sendmail(self.emailFrom, recipients, msg.as_string())
-			smtp.quit()
-		except:
-			logging.error("Sending email failed! Message: %s" % msg)
-
-	def processQueue(self):
-		try:
-			while True:
-				self._processMessage(*self.queue.popleft())
-		except IndexError:
-			#queue is empty
-			pass
 
 class Rcubic(object):
 	def __init__(self, opts):
@@ -128,7 +65,6 @@ class Rcubic(object):
 		self.log = None
 		self.config = {}
 		self.port = 0
-		self.notification = RcubicNotification()
 		self.scriptDir = ""
 		self.scriptOverrideDir = ""
 		self.gitDir = ""
@@ -141,7 +77,7 @@ class Rcubic(object):
 						  "environmentOptions", "specialGroups",
 						  "listenAddress", "listenPortRange", "jobExpireTime",
 						  "smtpServer", "emailSubjectPrefix", "emailFrom", "maxEmailLogSizeKB",
-						  "defaultRelease", "hijackPoint", "SSLKey", "SSLCert", "token"]
+						  "defaultRelease", "SSLKey", "SSLCert", "token"]
 		splitOptions = ["specialGroups"]
 
 		configpaths = [ sys.argv[0][0:sys.argv[0].rindex("/")],
@@ -165,7 +101,11 @@ class Rcubic(object):
 		elif "environment" in self.config:
 			self.environment = self.config["environment"]
 
-		self._initNotification()
+		self.notification = RCubicNotification(self.config["emailFrom"],
+			self.config["emailSubjectPrefix"], self.config["smtpServer"],
+			self.config.get("cc", ""))
+		if self.opts.foreground or self.config.get("notification", "True") == "False":
+			self.notification.disable()
 
 		if self.opts.sessionMode:
 			self.log = LogToDB(":memory:")
@@ -184,13 +124,13 @@ class Rcubic(object):
 		)
 		self.rsp.read_dirs(self.scriptDir)
 		self.rsp.read_dirs(self.scriptOverrideDir, True)
-
 		self.rsp.set_href(self.config["gerritURL"], self.config["gerritProject"], self.gitHead, self.gitDir)
 
 		self.tree = self.rsp.init_tree()
 		self.tree.legend["time"] = time.strftime("%Y-%m-%d %H:%M:%S")
 		self.tree.legend["version"] = self.opts.release
 		self.tree.legend["environment"] = self.environment
+		self.tree.waitsuccess = not self.opts.sessionMode
 
 		for script in self.rsp.scripts():
 			for e in script.job.DONE_STATES:
@@ -213,12 +153,11 @@ class Rcubic(object):
 		and raised all at once."""
 		errors = []
 
-
 		group = None
 		for group in self.groups:
-			if group.autoadd == False:
+			if group.forceselect == False:
 				break
-		if group is None or  group.autoadd != False:
+		if group is None or  group.forceselect != False:
 			raise ConfigurationError("ERROR: No groups selected for installation")
 
 		egroups = []
@@ -246,7 +185,7 @@ class Rcubic(object):
 		if not self.environment:
 			errors.append("Environment not not specified.")
 
-		self._updateGraph(updateDot=True)
+		self.tree.write_status(self.config["asvgFile"], self.config["njsonFile"], True)
 
 		errors.extend(self.tree.validate())
 
@@ -257,8 +196,13 @@ class Rcubic(object):
 		if self.environment not in self.config["environmentOptions"]:
 			errors.append("environmentOptions: %s" %self.config["environmentOptions"])
 
-		if not self._verifyNotificationGroups():
-			errors.append("No notification configured. This is a bad thing")
+		ngroups = [ prd for scr in self.rsp.scripts() for prd in scr.products ]
+		errngroups = self.notification.has_groups(ngroups)
+		if len(errngroups) > 0:
+			errors.append(
+				"No matching configuration for notification group(s): {0}."
+				.format(" ".join(errngroups))
+			)
 
 		if len(errors) > 0:
 			logging.error("Errors detected")
@@ -266,15 +210,6 @@ class Rcubic(object):
 				logging.error(error)
 			raise ConfigurationError("Errors:\n {0}".format("\n".join(errors)))
 
-	def _initNotification(self):
-		self.notification.emailFrom = self.config["emailFrom"]
-		self.notification.subject = self.config["emailSubjectPrefix"]
-		self.notification.server = self.config["smtpServer"]
-		self.notification.cc = self.config.get("cc", "")
-		if self.opts.foreground:
-			self.notification.disable()
-		if self.config.get("notification", "True") == "False":
-			self.notification.disable()
 
 	def _initGit(self):
 		#TODO: this will fail if called multiple times in session mode.
@@ -380,9 +315,9 @@ class Rcubic(object):
 			self.fullURL = "%s?prefix=%s/%s/work" %(self.baseURL, self.pathURL, workpath)
 			logging.info("URL: %s" % self.fullURL)
 
-		fileMap = { "fdotFile":"full.dot", "fpngFile":"full.png", "adotFile":"arb.dot",
-					"asvgFile":"arb.svg", "pidFile":"rcubic.pid", "logFile":"rcubic.log",
-					"auditLog":"rcubic.aud" , "njsonFile": "nodes.json"}
+		fileMap = { "asvgFile":"arb.svg", "pidFile":"rcubic.pid",
+			"logFile":"rcubic.log",	"auditLog":"rcubic.aud",
+			"njsonFile":"nodes.json" }
 		for k, v in fileMap.iteritems():
 			self.config[k] = "%s/work/%s" %(self.config["basePath"], v)
 
@@ -470,12 +405,16 @@ class Rcubic(object):
 		for element in self.etree.xpath("/rcubic/release/install"):
 			rg = RCubicGroup(element=element)
 			if rg.name in self.config["specialGroups"]:
-				rg.autoadd = True
+				rg.forceselect = True
 				groups.append(rg)
 			elif rg.name in groupselect:
 				groups.append(rg)
 			elif len(groupselect) == 0:
-				if self.log.isNewestVersion(rg.name, rg.version, exectree.ExecJob.STATE_SUCCESSFULL):
+				if not rg.autoselect:
+					logging.info(
+						"Skipping %s autoselection is disabled." % (rg.name)
+					)
+				elif self.log.isNewestVersion(rg.name, rg.version, exectree.ExecJob.STATE_SUCCESSFULL):
 					groups.append(rg)
 				else:
 					logging.info(
@@ -502,59 +441,18 @@ class Rcubic(object):
 		count = 0
 		for product in self.etree.xpath("/rcubic/notification/product"):
 			try:
-				self.notification.addProductEmail(product.attrib["name"], product.attrib["email"])
+				self.notification.add_email(product.attrib["name"], product.attrib["email"])
 			except KeyError:
 				logging.error("Element on line %i of %s is missing an attribute." %(product.sourceline, product.base))
 				return 0
 			count += 1
 		return count
 
-	def _verifyNotificationGroups(self):
-		exit = True
-		for rs in self.rsp.scripts():
-			for product in rs.products:
-				if not self.notification.isProductConfigured(product):
-					exit = False
-					logging.error("'%s' references notification group '%s' which is not defined" %(rs.name, product))
-		return exit
-
-	def reschedule(self, scriptName):
-		trees = list(self.tree.subtrees)
-		trees.append(self.tree)
-		for tree in trees:
-			job = tree.find_job(scriptName)
-			if job is not None:
-				break
-		if job is None:
-			logging.debug("Reschedule failed: job not found")
-			return False
-		if not job.is_failed():
-			logging.debug("Reschedule failed: job has not failed")
-			return False
-		job.reset()
-		return job.start()
-
-	def manualOverride(self, scriptName):
-		trees = list(self.tree.subtrees)
-		trees.append(self.tree)
-		for tree in trees:
-			job = tree.find_job(scriptName)
-			if job is not None:
-				break
-		if job is None:
-			logging.debug("Override failed: job not found")
-			return False
-		if job.state not in job.ERROR_STATES:
-			logging.debug("Override failed: job has not failed")
-			return False
-		job.state = job.STATE_SUCCESSFULL
-		return True
-
 	def validate(self):
 		errorMessages = ""
 
 		#Validate and run validation scripts
-		if self.opts.strictValidation:
+		if not self.opts.weakvalidation:
 			if os.path.exists(self.validationDir):
 				arguments = [ self.environment, self.opts.release, " ".join(map(str, self.groups))]
 				prependRe = re.compile("^", re.M)
@@ -589,25 +487,36 @@ class Rcubic(object):
 		else:
 			return errorMessages
 
-	def _updateGraph(self, updateDot=False):
-		self.tree.write_status(self.config["asvgFile"], self.config["njsonFile"], updateDot)
-
-	def _updateProgress(self, scriptName, version, kind, message):
-		rs = self.rsm.find(scriptName)
-		if not rs:
-			logging.error("received message with unmatched script. (%s, %s)" %(scriptName, version))
+	def updateProgress(self, scriptName, progress):
+		job = self.tree.find_job_deep(scriptName)
+		if job is None:
+			logging.error("Progress update failed: job %s not found" %(scriptName))
 			return False
-		if rs.version != version:
-			logging.error("received message with unmatched version. (%s, %s)" %(scriptName, version))
-			return False
-		if kind == "PROGRESS":
-			if not rs.updateProgress(message):
-				logging.error("received message with invalid progress message. (%s, %s, %s)" %(scriptName, version, message))
-				return False
-		else:
-			logging.error("received message with unknown message type (%s)." %(kind))
-			return False
+		job.progress = progress
 		return True
+
+	def reschedule(self, scriptName):
+		job = self.tree.find_job_deep(scriptName)
+		if job is None:
+			logging.debug("Reschedule failed: job not found")
+			return False
+		if not job.is_failed():
+			logging.debug("Reschedule failed: job has not failed")
+			return False
+		job.reset()
+		return job.start()
+
+	def manualOverride(self, scriptName):
+		job = self.tree.find_job_deep(scriptName)
+		if job is None:
+			logging.debug("Override failed: job not found")
+			return False
+		if job.state not in job.ERROR_STATES:
+			logging.debug("Override failed: job has not failed")
+			return False
+		job.state = job.STATE_SUCCESSFULL
+		return True
+
 
 	def statusEventHandler(self, rs, event):
 		self.log.saveStatus(rs.group.name, rs.version, rs.job.state, self.gitHead, rs.job.name)
@@ -618,13 +527,13 @@ class Rcubic(object):
 			self.tree.cancel()
 
 		if rs.job.is_failed():
-			self.notification.notifyProduct(
+			self.notification.send(
 				rs.products,
 				"%s (%s) failed" %(rs.name, rs.version),
 				rs.job.read_log(1024 * int(self.config['maxEmailLogSizeKB']))
 			)
 		elif rs.job.failcount > 1 and rs.job.is_success():
-			self.notification.notifyProduct(
+			self.notification.send(
 				rs.products,
 				"%s (%s) recovered" %(rs.name, rs.version),
 				"The script %s which has previously failed has now succeeded." % rs.name
@@ -684,7 +593,7 @@ class Rcubic(object):
 		except OSError:
 			pass
 
-		self._updateGraph()
+		self.tree.write_status(self.config["asvgFile"], self.config["njsonFile"], False)
 		if self.config["SSLKey"] == "" or self.config["SSLCert"] == "":
 			self.config["SSLKey"] = None
 			self.config["SSLCert"] = None
@@ -701,8 +610,7 @@ class Rcubic(object):
 		self.tree.extend_args([self.environment, `self.port`, `self.port`])
 		self.tree.spawn_json_updater(self.config["njsonFile"])
 		self.tree.run(timeout=self.config["jobExpireTime"]*60*60)
-		self._updateGraph(updateDot=True)
-		self.notification.processQueue()
+		self.tree.write_status(self.config["asvgFile"], self.config["njsonFile"], True)
 		self.communicator.stop()
 
 		self.cleanup()
@@ -710,7 +618,14 @@ class Rcubic(object):
 		if not self.tree.is_done():
 			logging.error("exited with orphaned jobs")
 			return False
-		return self.tree.is_success()
+		if not self.tree.is_success():
+			fjobs = list()
+			for tree in self.tree.trees():
+				fjobs.extend(tree.failed_jobs())
+			logging.error("Following jobs have failed: {}."
+				.format(" ".join([j.name for j in fjobs])))
+			return False
+		return True
 
 class RcubicDaemon(Daemon):
 	def setRcubic(self,rcubic):
@@ -742,7 +657,7 @@ if __name__ == "__main__":
 	argParser.add_argument('-g', dest='group', metavar='group', action='append', default=[],
 							help='Select Group to run. Can be specified multiple times for multiple groups.')
 	argParser.add_argument('-v', dest='validate', action='store_const', const=True, default=False, help='Validate configuration.')
-	argParser.add_argument('-V', '--extval', '--strictValidation', dest='strictValidation', action='store_const', const=True, default=False, help='Strict validation configuration. Run validation scripts.')
+	argParser.add_argument('-w', '--weakval', dest='weakvalidation', action='store_const', const=True, default=False, help='Skip validation scripts.')
 	argParser.add_argument('-f', dest='foreground', action='store_const', const=True, default=False,  help='Run in foreground (debug) mode.')
 	argParser.add_argument('-s', dest='sessionMode', action='store_const', const=True, default=False,  help='Run in Session mode.')
 	argParser.add_argument('-a', dest='whitelist', action='append', default=None,

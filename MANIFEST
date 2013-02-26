@@ -11,6 +11,7 @@ RCubic/RESTCommunicator.py
 RCubic/daemon.py
 RCubic/ScriptStatus.py
 RCubic/RCubicScript.py
+RCubic/RCubicNotification.py
 RCubic/exectree.py
 RCubic/__init__.py
 RCubic/rcubic.xml.template

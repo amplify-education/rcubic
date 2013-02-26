@@ -27,9 +27,11 @@ import gevent
 import logging
 from gevent import (event, server, socket)
 
-class VersionCompareError(RuntimeError):
+class VersionCompareError(Exception):
     pass
 
+class FatalRuntimeError(RuntimeError):
+	pass
 
 def popenNonblock(args, data='', stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, cwd=None, logFile=None):
 	"""Communicate with the process non-blockingly.
@@ -88,24 +90,6 @@ def popenNonblock(args, data='', stdin=subprocess.PIPE, stdout=subprocess.PIPE, 
 			gevent.sleep(1)
 
 	return (returncode, output)
-
-class ConfigurationError(Exception):
-	def __init__(self, value):
-		self.value = value
-
-	def __str__(self):
-		return repr(self.value)
-
-
-class FatalRuntimeError(Exception):
-	def __init__(self, value):
-		self.value = value
-
-	def __str__(self):
-		return repr(self.value)
-
-class VersionCompareError(Exception):
-	pass
 
 class LogToDB(object):
 	def __init__(self, dbPath):
