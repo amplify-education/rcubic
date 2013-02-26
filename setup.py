@@ -29,7 +29,7 @@ for scheme in INSTALL_SCHEMES.values():
     scheme['data'] = scheme['purelib']
 
 setup(name = 'RCubic',
-      version = '1.1',
+      version = '1.2',
       description = 'RCubic',
       # Required packages
       requires = ['MiniREST', 'lxml', 'simplejson', 'pydot', 'gevent'],
