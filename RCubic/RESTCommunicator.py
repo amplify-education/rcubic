@@ -131,7 +131,7 @@ class RESTCommunicator(RESTServer):
 		env -- doesn't expect any paramaters
 
 		"""
-		logging.info("Received reclone request")
+		logging.info("Received cancel request")
 		resp = self.rcubic.abort()
 		start_response(responseCodes[200], responseTypes['plaintext'])
 		return str(resp)

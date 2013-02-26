@@ -1189,7 +1189,10 @@ class ExecTree(object):
         """ True if all jobs in tree have completed execution """
         for job in self.jobs:
             if job.mustcomplete:
-                if self.waitsuccess and not job.is_success():
+                if ( not self.cancelled
+                     and self.waitsuccess
+                     and not job.is_success()
+                   ):
                     logging.debug("{0} is not successfull".format(job.name))
                     return False
                 if not job.is_done():
@@ -1217,10 +1220,13 @@ class ExecTree(object):
         as is"""
         if self.cancelled:
             return
+        logging.info("Cancelling execution.")
+        self.cancelled = True
         for job in self.jobs:
             job.cancel()
         for tree in self.subtrees:
             tree.cancel()
+        self.is_done()
 
     def run(self, blocking=True, timeout=None):
         """Schedule all jobs part of tree for execution."""
