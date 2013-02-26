@@ -619,8 +619,11 @@ class Rcubic(object):
 			logging.error("exited with orphaned jobs")
 			return False
 		if not self.tree.is_success():
-			logging.error("Following jobs have failed: {0}."
-				.format(" ".join([j.name for j in self.tree.failed_jobs()])))
+			fjobs = list()
+			for tree in self.tree.trees():
+				fjobs.extend(tree.failed_jobs())
+			logging.error("Following jobs have failed: {}."
+				.format(" ".join([j.name for j in fjobs])))
 			return False
 		return True
 

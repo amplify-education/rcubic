@@ -464,7 +464,8 @@ class ExecJob(object):
         """ Prepares jobs to be executed again """
         for key in self.events.iterkeys():
             self.events[key].clear()
-        self.progress = 0
+        if self.progress > 0:
+            self.progress = 0
         self.state = self.STATE_RESET
         logging.debug("job {0} has been reset.".format(self.name))
 
@@ -517,6 +518,8 @@ class ExecJob(object):
     def read_log(self, size):
         """ Read in the log file for job, up to size bytes.
         Return log as string"""
+        if self.jobpath is None:
+            return "Subtree manager has no log."
         if self.logfile is None:
             return ""
         try:
@@ -584,12 +587,11 @@ class ExecJob(object):
                     )
             elif self.subtree is not None:
                 logging.debug("starting {0} {1}".format(self.name, "subtree"))
-                rcode = self.subtree.iterrun()
-                #TODO: compute rcode
-                logging.warning(
-                    "Sub tree is not checked for success before proceeding"
-                )
-                rcode = 0
+                self.subtree.iterrun()
+                if self.subtree.is_success():
+                    rcode = 0
+                else:
+                    rcode = 1
             logging.debug("finished {0} status {1}".format(self.name, rcode))
         finally:
             self._release_resources(self.resources)
@@ -879,6 +881,12 @@ class ExecTree(object):
                 return job
         return default
 
+    def trees(self):
+        """Generate all trees one by one"""
+        yield self
+        for tree in self.subtrees:
+            yield tree
+
     def find_resource(self, needle, default=None):
         """ Find all resources by uuid or name """
         for resource in self.resources:
@@ -919,9 +927,7 @@ class ExecTree(object):
 
     def find_job_deep(self, needle, default=None):
         """ Find job based on name or uuid, looks through subtrees """
-        trees = list(self.subtrees)
-        trees.append(self)
-        for tree in trees:
+        for tree in self.trees():
             job = tree.find_job(needle)
             if job is not None:
                 return job
@@ -941,7 +947,8 @@ class ExecTree(object):
 
     def add_dep(self, parent=None, child=None,
             state=ExecJob.STATE_SUCCESSFULL, xml=None):
-        """ Add a dependency between 2 jobs that have been previously added to tree """
+        """Add a dependency between 2 jobs that have been previously added
+        to tree"""
         colors = None
         dep = None
         if xml is not None:
