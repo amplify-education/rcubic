@@ -1,3 +1,4 @@
+Cython==0.18
 gevent==0.13.8
 lxml==3.1.2
 miniREST==0.3
