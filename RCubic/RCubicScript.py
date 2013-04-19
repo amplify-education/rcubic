@@ -71,31 +71,18 @@ class RCubicScript(object):
         fieldre = re.compile(r"^[\s]*#%s:.*$" % (field), re.MULTILINE)
         begin = re.compile(r"^#[A-Z0-9]+:[\s]*")
         line = fieldre.search(script)
-        if line:
-            return begin.sub("", line.group(0), 1)
-        else:
-            return default
+        return begin.sub("", line.group(0), 1) if line else default
 
     def _param_split(self, param):
-        val = []
-        if param is not None:
-            separator = re.compile(r"[,;\s]+")
-            val = separator.split(param)
-            while "" in val:
-                val.remove("")
-        return val
+        # Warning: code change not covered in tests
+        separator = re.compile(r"[,;\s]+")
+        return filter(None, separator.split(param)) if param else []
 
     def _parseHeaderLine(self, line):
+        # Warning: code change not covered in tests
         begin = re.compile(r"^#[A-Z0-9]+:[\s]*")
         separator = re.compile(r"[,;\s]+")
-        retVal = separator.split(begin.sub("", line, 1))
-        while True:
-            try:
-                retVal.remove("")
-            except ValueError:
-                break
-        return retVal
-
+        return filter(None, separator.split(begin.sub("", line, 1)))
 
 class RCubicGroup(object):
     def __init__(self, name="", phase=0, version=None, autoadd=False, element=None):
@@ -141,17 +128,9 @@ class RCubicGroup(object):
 
     def is_success(self):
         return all(script.job.is_success() for script in self.scripts)
-        #for script in self.scripts:
-        #    if not script.job.is_success():
-        #        return False
-        #return True
 
     def is_done(self):
         return all(script.job.is_done() for script in self.scripts)
-        #for script in self.scripts:
-        #    if not script.job.is_done():
-        #        return False
-        #return True
 
     def add_script(self, rs, override=False):
         if override:
@@ -182,11 +161,6 @@ class RCubicScriptParser(object):
         self.subtrees = {}
 
     def scripts(self):
-        #scripts = []
-        #for group in self.groups:
-        #    for script in group.scripts:
-        #        scripts.append(script)
-        #return scripts
         return [script for group in self.groups for script in group.scripts]
 
     def read_dirs(self, directory, override=False):

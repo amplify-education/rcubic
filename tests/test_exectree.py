@@ -306,7 +306,7 @@ class TestET(unittest.TestCase):
 			last = text.find(self.my_arg_str_match.format(arg), last)
 			self.assertTrue(last >= 0)
 
-		self.assertIsNone(runreturn)
+		self.assertTrue(runreturn is None)
 		self.assertTrue(ltree.is_done())
 		self.assertTrue(self.tree.is_done())
 		logging.debug("{0} == {1}".format(self.ljob1_count, len(arguments)))

@@ -733,8 +733,8 @@ class ExecTree(object):
                     logging.error(
                         "Legend item is missing required xml attribute ({0}:{1})."
                         .format(
-                        legenditem.base,
-                        legenditem.sourceline
+                            legenditem.base,
+                            legenditem.sourceline
                         )
                     )
                     raise

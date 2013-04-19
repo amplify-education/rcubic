@@ -84,8 +84,8 @@ class RCubicServer(RESTServer):
         """
         try:
             events = self.receivedCheckIns.pop(checkInName)
-            for event in events:
-                events[event].set()
+            for event in events.values():
+                event.set()
             return True
         except KeyError:
             return False
