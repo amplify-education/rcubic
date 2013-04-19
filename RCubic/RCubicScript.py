@@ -84,6 +84,7 @@ class RCubicScript(object):
         separator = re.compile(r"[,;\s]+")
         return filter(None, separator.split(begin.sub("", line, 1)))
 
+
 class RCubicGroup(object):
     def __init__(self, name="", phase=0, version=None, autoadd=False, element=None):
         if element is not None:
