@@ -3,8 +3,10 @@ language: python
 python:
     - "2.7"
     - "2.6"
-    - "pypy"
-    - "3.3"
+# gevent does not build in python 3.3 because of print_function
+#    - "3.3"
+# gevent does not build in pypy because of missing fields
+#    - "pypy"
 
 install:
   - sudo apt-get install libevent-dev graphviz
