@@ -21,10 +21,10 @@
 # THE SOFTWARE.
 
 
-class ExecForest:
 	def __init__(self):
 		#todo enforce that we only have one forest
 		self.trees = []
+class ExecForest(object):
 
 	def add_tree(self, tree):
 		self.trees.append(tree)
