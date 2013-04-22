@@ -223,8 +223,8 @@ class RCubicScriptParser(object):
                 output = p.communicate()[0]
         separator = re.compile(r"[,;\s]+")
         args = [arg for arg in separator.split(output) if arg]
-        #args = separator.split(output)
-        #while "" in args:
+        # args = separator.split(output)
+        # while "" in args:
         #    args.remove("")
         logging.debug("Arguments {0}".format(args))
         return args
