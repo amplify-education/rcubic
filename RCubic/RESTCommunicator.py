@@ -21,11 +21,11 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
+import logging
 
 # RESTServer imports
 from MiniREST.RESTServer import RESTServer, responseCodes, responseTypes
 
-import logging
 
 class RESTCommunicator(RESTServer):
 	"""RESTCommunicator - creates a new RESTCommunicator instance.
