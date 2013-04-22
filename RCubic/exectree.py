@@ -22,15 +22,8 @@
 # THE SOFTWARE.
 
 import uuid
-import pydot
-#import xml.etree.ElementTree as et
-from lxml import etree as et
-import gevent
-from gevent import (Greenlet, event, socket)
 import os
 import random
-#from itertools import ifilter
-#from operator import methodcaller
 import subprocess
 import fcntl
 import errno
@@ -38,6 +31,13 @@ import sys
 import logging
 import simplejson
 import re
+import fnmatch
+
+from lxml import etree as et
+import gevent
+from gevent import (Greenlet, event, socket)
+import pydot
+
 
 class TreeDefinedError(RuntimeError):
 	pass
