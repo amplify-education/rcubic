@@ -42,26 +42,42 @@ from RCubic.RCubicUtilities import dict_by_attr
 
 
 class TreeDefinedError(RuntimeError):
-	pass
+    pass
+
+
 class TreeUndefinedError(RuntimeError):
-	pass
+    pass
+
+
 class JobDefinedError(RuntimeError):
-	pass
+    pass
+
+
 class JobError(RuntimeError):
-	pass
+    pass
+
+
 class JobUndefinedError(RuntimeError):
-	pass
+    pass
+
+
 class UnknownStateError(RuntimeError):
-	pass
+    pass
+
+
 class DependencyError(RuntimeError):
-	pass
+    pass
+
+
 class XMLError(RuntimeError):
-	pass
+    pass
+
+
 class IterratorOverrunError(RuntimeError):
-	pass
+    pass
 
 
-#class ExecJob(Greenlet):
+# class ExecJob(Greenlet):
 class ExecJob(object):
 	STATES = (0, 1, 2, 3, 4, 5, 6, 7)
 	STATE_IDLE, STATE_RUNNING, STATE_SUCCESSFULL, STATE_FAILED, STATE_CANCELLED, STATE_UNDEF, STATE_RESET, STATE_BLOCKED = STATES
@@ -551,38 +567,34 @@ class ExecJob(object):
 			return False
 
 class ExecIter(object):
-	def __init__(self, name=None, args=None):
-		if args == None:
-			self.args = []
-		else:
-			self.args = args
-		self.run = 0
-		self.valid = None
-		self.name = name
+    def __init__(self, name=None, args=None):
+        self.args = args or []
+        self.run = 0
+        self.valid = None
+        self.name = name
 
-	def __str__(self):
-		return "<ExecIter {0}>".format(self.name)
+    def __str__(self):
+        return "<ExecIter {0}>".format(self.name)
 
-	def is_exhausted(self):
-		logging.debug("is_exhausted {0}>{1}".format(self.run, len(self.args)))
-		if self.run >= len(self.args):
-			return True
-		return False
+    def is_exhausted(self):
+        logging.debug("is_exhausted {0}>{1}".format(self.run, len(self.args)))
+        return self.run >= len(self.args)
 
-	def len(self):
-		return len(self.args)
+    def len(self):
+        return len(self.args)
 
-	def increment(self, inc=1):
-		self.run += inc
-		return self.run < len(self.args)
+    def increment(self, inc=1):
+        self.run += inc
+        return self.run < len(self.args)
 
-	@property
-	def argument(self):
-		if len(self.args) <= 0:
-			return ""
-		elif self.run > len(self.args):
-			return self.args[len(self.args)-1]
-		return self.args[self.run]
+    @property
+    def argument(self):
+        if len(self.args) <= 0:
+            return ""
+        elif self.run > len(self.args):
+            return self.args[-1]
+        return self.args[self.run]
+
 
 class ExecResource(object):
 	def __init__(self, tree, name="", avail=0, xml=None):
