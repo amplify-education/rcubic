@@ -12,9 +12,6 @@
 # The above copyright notice and this permission notice shall be included in
 # all copies or substantial portions of the Software.
 #
-
-
-import os, sys, time, subprocess, re, errno, fcntl
 # THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 # IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
 # FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
@@ -22,13 +19,20 @@ import os, sys, time, subprocess, re, errno, fcntl
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
-import sqlite3
-import gevent
-import logging
-from gevent import (event, server, socket)
 
-class VersionCompareError(RuntimeError):
-    pass
+
+import os
+import sys
+import time
+import subprocess
+import re
+import errno
+import fcntl
+import sqlite3
+import logging
+
+import gevent
+from gevent import socket
 
 
 def popenNonblock(args, data='', stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, cwd=None, logFile=None):
