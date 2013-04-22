@@ -100,22 +100,24 @@ def popenNonblock(args, data='', stdin=subprocess.PIPE, stdout=subprocess.PIPE, 
 	return (returncode, output)
 
 class ConfigurationError(Exception):
-	def __init__(self, value):
-		self.value = value
+    def __init__(self, value):
+        self.value = value
 
-	def __str__(self):
-		return repr(self.value)
+    def __str__(self):
+        return repr(self.value)
 
 
 class FatalRuntimeError(Exception):
-	def __init__(self, value):
-		self.value = value
+    def __init__(self, value):
+        self.value = value
 
-	def __str__(self):
-		return repr(self.value)
+    def __str__(self):
+        return repr(self.value)
+
 
 class VersionCompareError(Exception):
-	pass
+    pass
+
 
 class LogToDB(object):
 	def __init__(self, dbPath):
