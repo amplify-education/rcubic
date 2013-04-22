@@ -126,7 +126,7 @@ class ExecJob(object):
                 except KeyError:
                     # Undefined variable legenditem
                     # Alternative is my best guess
-                    #logging.error(
+                    # logging.error(
                     #    "Argument of is missing required xml attribute ({0}:{1})."
                     #    .format(
                     #        legenditem.base,
