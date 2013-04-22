@@ -40,7 +40,7 @@ class RCubicServer(RESTServer):
 
         """
         super(RCubicServer, self).__init__(*args, **kwargs)
-        self.recievedCheckIns = { }
+        self.receivedCheckIns = {}
         self.registerFunction('checkInUser', self.checkInUser)
 
     def checkInUser(self, env, start_reponse, post):
@@ -55,9 +55,9 @@ class RCubicServer(RESTServer):
         # Try an 'anyuser' room check in
         vs = user.split('/')
         try:
-            self.recievedCheckIns[checkInName][vs[0]].set()
+            self.receivedCheckIns[checkInName][vs[0]].set()
         except KeyError:
-            self.recievedCheckIns[checkInName][user].set()
+            self.receivedCheckIns[checkInName][user].set()
         start_reponse(responseCodes[200], responseTypes['plaintext'])
         return 'OK'
 
@@ -70,9 +70,9 @@ class RCubicServer(RESTServer):
         checkInName -- unique string identifier
 
         """
-        if not checkInName in self.recievedCheckIns:
-            self.recievedCheckIns[checkInName] = { }
-        self.recievedCheckIns[checkInName][user] = ev
+        if not checkInName in self.receivedCheckIns:
+            self.receivedCheckIns[checkInName] = {}
+        self.receivedCheckIns[checkInName][user] = ev
 
     def unRegisterCheckIn(self, checkInName):
         """Internal function which deletes all events waiting for 'checkInName'.
@@ -83,9 +83,9 @@ class RCubicServer(RESTServer):
 
         """
         try:
-            events = self.recievedCheckIns.pop(checkInName)
             for event in events:
                 events[event].set()
+            events = self.receivedCheckIns.pop(checkInName)
             return True
         except KeyError:
             return False
