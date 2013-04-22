@@ -30,9 +30,15 @@ import errno
 import fcntl
 import sqlite3
 import logging
+from operator import attrgetter
 
 import gevent
 from gevent import socket
+
+
+def dict_by_attr(series, name):
+    a = attrgetter(name)
+    return dict((a(item), item) for item in series)
 
 
 def popenNonblock(args, data='', stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, cwd=None, logFile=None):
