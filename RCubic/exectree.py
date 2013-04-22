@@ -38,6 +38,8 @@ import gevent
 from gevent import (Greenlet, event, socket)
 import pydot
 
+from RCubic.RCubicUtilities import dict_by_attr
+
 
 class TreeDefinedError(RuntimeError):
 	pass
