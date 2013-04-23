@@ -513,5 +513,50 @@ class TestET(unittest.TestCase):
         self.assertFalse(self.tree.is_success())
 
 
+    def test_skipped_step(self):
+        """ Undefined job dependencies """
+        times = {}
+        job4 = self._newjob("iop", self.tree, vfile=False)
+        job5 = self._newjob("iom", self.tree)
+        job6 = self._newjob("ior", self.tree, vfile=False)
+
+        job4.jobpath = job4.UNDEF_JOB
+        job6.jobpath = job6.UNDEF_JOB
+
+        self.tree.add_dep(self.job3, job4)
+        self.tree.add_dep(job4, job5)
+        self.tree.add_dep(job4, job6)
+
+        jobs = [self.job1, self.job2, self.job3, job4, job5]
+        for job in jobs:
+            times[job] = {}
+            for event in [job.STATE_RUNNING, job.STATE_SUCCESSFULL]:
+                save_event_handler = functools.partial(
+                    self._save_event, times[job], event
+                )
+                job.events[event].rawlink(save_event_handler)
+
+
+        with gevent.Timeout(10) as timeout:
+            try:
+                self.tree.run()
+            except gevent.timeout.Timeout, tobject:
+                if timeout == tobject:
+                    graph = self.tree.dot_graph()
+                    graph.write_png("/tmp/et1.png")
+                    logging.error("Look at /tmp/et1.png for details")
+                raise
+
+        for job in jobs:
+            if job == job5:
+                continue
+            jst = times[job][job.STATE_RUNNING]
+            j5st = times[job5][job.STATE_RUNNING]
+            logging.debug("{0} start time: {1}. {2} start time: {3}"
+                .format(job, jst, job5, j5st)
+            )
+            self.assertTrue( jst < j5st )
+        
+
 if  __name__ == '__main__':
     unittest.main()

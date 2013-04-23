@@ -335,25 +335,21 @@ class ExecJob(object):
 
     def parent_deps(self):
         """ Return all jobs which are parents of this job """
-        deps = []
-        for dep in self.tree.deps:
-            if self == dep.child:
-                deps.append(dep)
-        return deps
+        return [dep for dep in self.tree.deps if self == dep.child]
 
     def child_deps(self):
         """ Return all jobs which are children of this job """
-        deps = []
-        for dep in self.tree.deps:
-            if self == dep.parent:
-                deps.append(dep)
-        return deps
+        return [dep for dep in self.tree.deps if self == dep.parent]
 
     def children(self):
         return [dep.child for dep in self.child_deps()]
 
     def parents(self):
         return [dep.parent for dep in self.parent_deps()]
+
+    def orphan(self):
+        """ True if job has no parents """
+        return len(self.parent_deps()) <= 0
 
     def validate(self, prepend=""):
         """ Ensure job can perform what is required of it at execution """
@@ -535,14 +531,16 @@ class ExecJob(object):
     def start(self):
         """ Put job in waiting queue, it will start when dependencies are
         fulfilled and resources are available"""
-        if self.state == self.STATE_UNDEF:
+        if self.state == self.STATE_UNDEF and self.orphan():
             logging.debug("{0} is short circuiting ({1})".format(
                     self.name, self.state
                 )
             )
+            self.events[self.STATE_RUNNING].set()
             self.events[self.STATE_SUCCESSFULL].set()
             return True
-        if self.is_success():
+        # Using STATE_SUCCESSFULL instead of is_successfull because we don't want to skip starting undef jobs
+        elif self.state == self.STATE_SUCCESSFULL:
             return False
         Greenlet.spawn(self._run)
         return True
@@ -550,7 +548,14 @@ class ExecJob(object):
     def _run(self):
         logging.debug("{0} is idling ({1})".format(self.name, self.state))
         self._parent_wait()
-        if self.state in self.DONE_STATES:
+
+        if self.state == self.STATE_UNDEF:
+            logging.debug("{} has nothing to do.".format(self.name))
+            self.events[self.STATE_RUNNING].set()
+            self.events[self.STATE_SUCCESSFULL].set()
+            return True
+        elif self.state in self.DONE_STATES:
+            logging.debug("Aborting start of, {0} is already in done state.".format(self.name))
             return None
 
         if not self._acquire_resources():
@@ -592,7 +597,9 @@ class ExecJob(object):
                     rcode = 0
                 else:
                     rcode = 1
-            logging.debug("finished {0} status {1}".format(self.name, rcode))
+            else:
+                logging.error("Hit unhandled start state for {0}.".format(self.name))
+            logging.debug("finished {0} status {1}.".format(self.name, rcode))
         finally:
             self._release_resources(self.resources)
 

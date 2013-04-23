@@ -622,7 +622,7 @@ class Rcubic(object):
 			fjobs = list()
 			for tree in self.tree.trees():
 				fjobs.extend(tree.failed_jobs())
-				logging.error("Following jobs have failed: {0}."
+			logging.error("Following jobs have failed: {0}."
 				.format(" ".join([j.name for j in fjobs])))
 			return False
 		return True
