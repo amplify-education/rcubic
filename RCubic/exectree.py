@@ -1165,6 +1165,10 @@ class ExecTree(object):
         for job in self.jobs:
             errors.extend(job.validate())
 
+        if self.iterator is not None:
+            if self.iterator.len() < 1:
+                errors.append("Iterator needs at least one argument to run.")
+
         return errors
 
     def validate_nocycles(self, job, visited, parents=None):
@@ -1215,6 +1219,8 @@ class ExecTree(object):
         return True
 
     def cancel(self):
+        #TODO break cancel into cancel and abort, cancel should be called externally we do want to kill off jobs without leaving cancel metadata all over the place
+        #TODO if canceling a subtree of a running parent .. we need to fail else we will have to wait 'till execution timeout
         """ Abort tree execution.
         Will prevent new jobs from starting. All running jobs will be left
         as is"""
@@ -1230,6 +1236,9 @@ class ExecTree(object):
 
     def run(self, blocking=True, timeout=None):
         """Schedule all jobs part of tree for execution."""
+        if self.cancelled:
+            logging.debug("Its cancelled already")
+            return
         logging.debug("About to spin up jobs for {0}".format(self.name))
         for job in self.jobs:
             for ek, ev in job.events.items():
@@ -1279,10 +1288,11 @@ class ExecTree(object):
         """ Advance iterator to next tree argument """
         logging.debug("Advancing tree {0}.".format(self.name))
         self.done_event.clear()
+        self.cancelled = False
         if self.iterator is not None:
             inc = self.iterator.increment()
         else:
-            inc = True 
+            inc = True
         if inc:
             for job in self.jobs:
                 job.reset()
@@ -1298,6 +1308,9 @@ class ExecTree(object):
             return False
         while True:
             self.run()
+            if not self.is_success():
+                logging.debug("Stopping subtree")
+                break
             self.advance()
             if self.iterator.is_exhausted():
                 break

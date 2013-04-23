@@ -299,53 +299,95 @@ class TestET(unittest.TestCase):
         self.assertTrue(job6.is_done())
         self.assertTrue(self.tree.is_done())
 
+    def _test_treetarator_init(self):
+        """Set up iterated tree for testing"""
+        self.ltree = exectree.ExecTree()
+        self.ltree.name = "local tree"
+        self.ljob1 = self._newjob("sal", self.ltree)
+        self._logfile_init(self.ljob1)
+
+        self.ljob2 = self._newjob("sov", self.ltree)
+        self.ltree.add_dep(self.ljob1, self.ljob2)
+
+        self.job4 = exectree.ExecJob("sym", subtree=self.ltree)
+        self.tree.add_job(self.job4)
+        self.tree.add_dep(self.job3, self.job4)
+
+        self.job5 = self._newjob("soi", self.tree)
+        self.tree.add_dep(self.job4, self.job5)
+
+        self.arguments = ["qwe", "asd", "zxc"]
+        self.ltree.iterator = exectree.ExecIter("test", self.arguments)
+
+        #Each time self.ljob1 executes increment counter
+        self.ljob1_count = 0
+        self.ljob1.events[exectree.ExecJob.STATE_SUCCESSFULL].rawlink(
+            self._test_treetarator_count_incr
+        )
+
     def _test_treetarator_count_incr(self, foo):
         self.ljob1_count += 1
 
     def test_treetarator(self):
         """Run trees with itterated subtrees"""
-
-        ltree = exectree.ExecTree()
-        ltree.name = "local tree"
-        ljob1 = self._newjob("sal", ltree)
-        self._logfile_init(ljob1)
-
-        ljob2 = self._newjob("sov", ltree)
-        ltree.add_dep(ljob1, ljob2)
-
-        job4 = exectree.ExecJob("sym", subtree=ltree)
-        self.tree.add_job(job4)
-        self.tree.add_dep(self.job3, job4)
-
-        job5 = self._newjob("soi", self.tree)
-        self.tree.add_dep(job4, job5)
-
-        arguments = ["qwe", "asd", "zxc"]
-        ltree.iterator = exectree.ExecIter("test", arguments)
-
-        #Each time ljob1 executes increment counter
-        self.ljob1_count = 0
-        ljob1.events[exectree.ExecJob.STATE_SUCCESSFULL].rawlink(
-            self._test_treetarator_count_incr
-        )
+        self._test_treetarator_init()
 
         with gevent.Timeout(30):
             runreturn = self.tree.run()
 
-        self.assertTrue(self.ljob1_count == len(arguments))
+        self.assertTrue(self.ljob1_count == len(self.arguments))
         #Confirm that we see all 3 arguments
-        text = self._logfile_read(ljob1)
+        text = self._logfile_read(self.ljob1)
         logging.debug("arguments: {0}".format(text))
         last = 0
-        for arg in arguments:
+        for arg in self.arguments:
             last = text.find(self.my_arg_str_match.format(arg), last)
             self.assertTrue(last >= 0)
 
         self.assertIsNone(runreturn)
-        self.assertTrue(ltree.is_done())
+        self.assertTrue(self.ltree.is_done())
         self.assertTrue(self.tree.is_done())
-        logging.debug("{0} == {1}".format(self.ljob1_count, len(arguments)))
+        logging.debug("{0} == {1}".format(self.ljob1_count, len(self.arguments)))
         self.test_graph(target="{0}/cyt.png".format(self.workdir))
+    
+    def _cancel_tree(self, tree, event):
+        tree.cancel()
+
+    def test_treetarator_ltree_cancel(self):
+        """Cancel nested tree mid iterated execution"""
+        self._test_treetarator_init()
+
+        cancel = functools.partial(self._cancel_tree, self.tree)
+        self.ljob1.events[exectree.ExecJob.STATE_RUNNING].rawlink(cancel)
+
+        with gevent.Timeout(30):
+            runreturn = self.tree.run()
+
+        logging.debug("ljob1.state: {}".format(self.ljob1.state))
+        self.assertTrue(self.ljob1.is_success())
+        self.assertTrue(self.ljob2.is_cancelled())
+        logging.debug("job4.state: {}".format(self.job4.state))
+        self.assertTrue(self.job4.is_failed())
+        self.assertTrue(self.job5.is_cancelled())
+        self.assertTrue(self.job3.is_success())
+        self.assertTrue(self.ltree.cancelled)
+    
+    def test_treetarator_tree_cancel(self):
+        """Cancel parent tree mid iterated execution"""
+        self._test_treetarator_init()
+
+        cancel = functools.partial(self._cancel_tree, self.tree)
+        self.job3.events[exectree.ExecJob.STATE_RUNNING].rawlink(cancel)
+
+        with gevent.Timeout(30):
+            runreturn = self.tree.run()
+
+        logging.debug("ljob1.state: {}".format(self.ljob1.state))
+        self.assertTrue(self.ljob1.is_cancelled())
+        self.assertTrue(self.ljob2.is_cancelled())
+        logging.debug("job4.state: {}".format(self.job4.state))
+        self.assertTrue(self.job4.is_cancelled())
+        self.assertTrue(self.ltree.cancelled)
 
     def test_resource_validation(self):
         """Resource validation"""
@@ -355,7 +397,7 @@ class TestET(unittest.TestCase):
 
         self.test_xml()
 
-    def _test_resource_evhandler(self, times, state, event):
+    def _save_event(self, times, state, event):
         times[state] = time.time()
 
     def test_resource_use(self):
@@ -374,10 +416,10 @@ class TestET(unittest.TestCase):
             j.resources.append(resource)
             times[j] = {}
             for ev in [j.STATE_RUNNING, j.STATE_SUCCESSFULL]:
-                h = functools.partial(
-                    self._test_resource_evhandler, times[j], ev
+                save_event_handler = functools.partial(
+                    self._save_event, times[j], ev
                 )
-                j.events[ev].rawlink(h)
+                j.events[ev].rawlink(save_event_handler)
         with gevent.Timeout(30):
             self.tree.run()
         self.assertTrue(self.tree.is_done())
@@ -460,7 +502,7 @@ class TestET(unittest.TestCase):
         self.assertTrue(wfs)
         self.assertTrue(self.tree.is_done())
         self.assertFalse(self.tree.is_success())
-    
+
 
     def test_block_on_fail(self):
         """With waitsuccess ensure tree blocks on failure"""
