@@ -162,11 +162,7 @@ class RCubicScriptParser(object):
         self.subtrees = {}
 
     def scripts(self):
-        scripts = []
-        for group in self.groups:
-            for script in group.scripts:
-                scripts.append(script)
-        return scripts
+        return [script for group in self.groups for script in group.scripts]
 
     def read_dirs(self, directory, override=False):
         failed_groups = []
