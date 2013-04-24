@@ -719,7 +719,7 @@ class ExecTree(object):
         self.cancelled = False
         self.started = False
         self.legend = {}
-        if xml == None:
+        if xml is None:
             self.uuid = uuid.uuid4()
             self.name = ""
             self.href = ""
