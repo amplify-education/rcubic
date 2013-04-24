@@ -266,11 +266,11 @@ class ExecJob(object):
         else:
             label = self.name
         kw = {
-            "style" : "filled",
-            "fillcolor" : self.STATE_COLORS[self.state],
-            "color" : self.tcolor,
-            "penwidth" : "3",
-            "fontname" : font,
+            "style": "filled",
+            "fillcolor": self.STATE_COLORS[self.state],
+            "color": self.tcolor,
+            "penwidth": "3",
+            "fontname": font,
         }
         if self.href:
             kw["href"] = "\"{0}\"".format(self.href)
