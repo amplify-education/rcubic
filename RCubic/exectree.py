@@ -703,7 +703,13 @@ class ExecDependency(object):
 
     def xml(self):
         """ Generate xml Element object representing the depedency """
-        args = {"parent": self.parent.uuid.hex, "child": self.child.uuid.hex, "state": `self.state`, "dcolor": self.color["defined"], "ucolor": self.color["undefined"]}
+        args = {
+            "parent": self.parent.uuid.hex,
+            "child": self.child.uuid.hex,
+            "state": repr(self.state),
+            "dcolor": self.color["defined"],
+            "ucolor": self.color["undefined"]
+        }
         eti = et.Element("execDependency", args)
         return eti
 
