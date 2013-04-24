@@ -32,132 +32,115 @@ from RCubic.RCubicUtilities import ConfigurationError
 
 
 class RCubicScript(object):
-	def __init__(self, filepath, version, override, phase, logdir, whitelist, blacklist, regexval, group):
-		self.path = filepath
-		self.name = filepath.split("/")[-1]
-		self.version = version
-		self.override = override
-		self.logfile = "{0}/{1}.log".format(logdir, self.name)
+    def __init__(self, filepath, version, override, phase, logdir, whitelist, blacklist, regexval, group):
+        self.path = filepath
+        self.name = filepath.split("/")[-1]
+        self.version = version
+        self.override = override
+        self.logfile = "{0}/{1}.log".format(logdir, self.name)
 
-		with open(self.path) as fd:
-			script = fd.read()
-		self.hdep = self._param_split(self._get_param(script, "HDEP"))
-		self.sdep = self._param_split(self._get_param(script, "SDEP"))
-		self.cdep = self._param_split(self._get_param(script, "CDEP"))
-		self.idep = self._get_param(script, "IDEP", None)
-		self.iterator = self._param_split(self._get_param(script, "ITER"))
-		self.resources = self._param_split(self._get_param(script, "RESOURCES"))
-		self.resources.append("default")
-		self.products = self._param_split(self._get_param(script, "PRODUCT"))
-		sphase = self._param_split(self._get_param(script, "PHASE"))
-		self.group = group
-		if regexval is None:
-			self.regexval = True
-		else:
-			r = regexval.search(script)
-			self.regexval = r is not None
-		self.href = ""
+        with open(self.path) as fd:
+            script = fd.read()
+        self.hdep = self._param_split(self._get_param(script, "HDEP"))
+        self.sdep = self._param_split(self._get_param(script, "SDEP"))
+        self.cdep = self._param_split(self._get_param(script, "CDEP"))
+        self.idep = self._get_param(script, "IDEP", None)
+        self.iterator = self._param_split(self._get_param(script, "ITER"))
+        self.resources = self._param_split(self._get_param(script, "RESOURCES"))
+        self.resources.append("default")
+        self.products = self._param_split(self._get_param(script, "PRODUCT"))
+        sphase = self._param_split(self._get_param(script, "PHASE"))
+        self.group = group
+        if regexval is None:
+            self.regexval = True
+        else:
+            r = regexval.search(script)
+            self.regexval = r is not None
+        self.href = ""
 
-		if len(sphase) >= 1:
-			phase = RCubicScriptParser.PHASES[sphase[0]]
-		self.phase = phase
+        if len(sphase) >= 1:
+            phase = RCubicScriptParser.PHASES[sphase[0]]
+        self.phase = phase
 
-		if len(blacklist) > 0 and self.name in blacklist:
-			self.path="-"
-		elif len(whitelist) > 0 and self.name not in whitelist:
-			self.path="-"
+        if len(blacklist) > 0 and self.name in blacklist:
+            self.path = "-"
+        elif len(whitelist) > 0 and self.name not in whitelist:
+            self.path = "-"
 
-	def _get_param(self, script, field, default=None):
-		fieldre = re.compile("^[\s]*#%s:.*$" %(field), re.MULTILINE)
-		begin = re.compile("^#[A-Z0-9]+:[\s]*")
-		line = fieldre.search(script)
-		if line:
-			return begin.sub("", line.group(0), 1)
-		else:
-			return default
+    def _get_param(self, script, field, default=None):
+        fieldre = re.compile(r"^[\s]*#%s:.*$" % (field), re.MULTILINE)
+        begin = re.compile(r"^#[A-Z0-9]+:[\s]*")
+        line = fieldre.search(script)
+        return begin.sub("", line.group(0), 1) if line else default
 
-	def _param_split(self, param):
-		val = []
-		if param is not None:
-			seperator = re.compile("[,;\s]+")
-			val = seperator.split(param)
-			while "" in val:
-				val.remove("")
-		return val
+    def _param_split(self, param):
+        # Warning: code change not covered in tests
+        separator = re.compile(r"[,;\s]+")
+        return filter(None, separator.split(param)) if param else []
 
-	def _parseHeaderLine(self, line):
-		begin = re.compile("^#[A-Z0-9]+:[\s]*")
-		seperator = re.compile("[,;\s]+")
-		retVal = seperator.split(begin.sub("", line, 1))
-		while True:
-			try:
-				retVal.remove("")
-			except ValueError:
-				break
-		return retVal
+    def _parseHeaderLine(self, line):
+        # Warning: code change not covered in tests
+        begin = re.compile(r"^#[A-Z0-9]+:[\s]*")
+        separator = re.compile(r"[,;\s]+")
+        return filter(None, separator.split(begin.sub("", line, 1)))
+
 
 class RCubicGroup(object):
-	def __init__(self, name="", phase=0, version=None, autoadd=False, element=None):
-		if element is not None:
-			try:
-				version = element.attrib["version"]
-				name = element.attrib["group"]
-			except KeyError:
-				raise ConfigurationError(
-					"Element on line %i of %s is missing version or group attributes."
-					%(element.sourceline, element.base)
-				)
+    def __init__(self, name="", phase=0, version=None, autoadd=False, element=None):
+        if element is not None:
+            try:
+                version = element.attrib["version"]
+                name = element.attrib["group"]
+            except KeyError:
+                raise ConfigurationError(
+                    "Element on line %i of %s is missing version or group attributes."
+                    % (element.sourceline, element.base)
+                )
 
-			try:
-				phase = RCubicScriptParser.PHASES[
-					element.attrib.get("phase", "DEFAULT").upper()
-				]
-			except:
-				raise ConfigurationError(
-					"Attribute phase on line %i of %s has unrecognized value: '%s'."
-					%(element.sourceline, element.base, phase)
-				)
+            try:
+                phase = RCubicScriptParser.PHASES[
+                    element.attrib.get("phase", "DEFAULT").upper()
+                ]
+            except:
+                raise ConfigurationError(
+                    "Attribute phase on line %i of %s has unrecognized value: '%s'."
+                    % (element.sourceline, element.base, phase)
+                )
 
-			fulloverride = element.attrib.get("fullOverride", "False").lower()
-			if fulloverride not in ["true", "false"]:
-				raise ConfigurationError(
-					"Element fullOverride is not (True|False) on line %i of %s."
-					%(element.sourceline, element.base)
-				)
-			else:
-				fulloverride = fulloverride == "true"
-		else:
-			fulloverride = False
-		self.name = name
-		self.phase = phase
-		self.version = version
-		self.autoadd = autoadd
-		self.scripts = []
-		self.fulloverride = fulloverride
+            fulloverride = element.attrib.get("fullOverride", "False").lower()
+            if fulloverride not in ["true", "false"]:
+                raise ConfigurationError(
+                    "Element fullOverride is not (True|False) on line %i of %s."
+                    % (element.sourceline, element.base)
+                )
+            else:
+                fulloverride = fulloverride == "true"
+        else:
+            fulloverride = False
+        self.name = name
+        self.phase = phase
+        self.version = version
+        self.autoadd = autoadd
+        self.scripts = []
+        self.fulloverride = fulloverride
 
-	def __str__(self):
-		return self.name
+    def __str__(self):
+        return self.name
 
-	def is_success(self):
-		for script in self.scripts:
-			if not script.job.is_success():
-				return False
-		return True
+    def is_success(self):
+        return all(script.job.is_success() for script in self.scripts)
 
-	def is_done(self):
-		for script in self.scripts:
-			if not script.job.is_done():
-				return False
-		return True
+    def is_done(self):
+        return all(script.job.is_done() for script in self.scripts)
 
-	def add_script(self, rs, override=False):
-		if override:
-			logging.debug("{0} is being overriden by {1}".format(rs.name, rs.path))
-			for script in self.scripts:
-				if script.name == rs.name:
-					self.scripts.remove(script)
-					break
-		self.scripts.append(rs)
+    def add_script(self, rs, override=False):
+        if override:
+            logging.debug("{0} is being overridden by {1}".format(rs.name, rs.path))
+            for script in self.scripts:
+                if script.name == rs.name:
+                    self.scripts.remove(script)
+                    break
+        self.scripts.append(rs)
 
 
 class RCubicScriptParser(object):<<<<<<< HEAD
