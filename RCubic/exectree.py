@@ -564,10 +564,7 @@ class ExecJob(object):
 
 class ExecIter(object):
     def __init__(self, name=None, args=None):
-        if args == None:
-            self.args = []
-        else:
-            self.args = args
+        self.args = args or []
         self.run = 0
         self.valid = None
         self.name = name
