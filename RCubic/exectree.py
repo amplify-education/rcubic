@@ -280,8 +280,8 @@ class ExecJob(object):
     def _dot_tree(self, font):
         subg = pydot.Subgraph(
             self.subtree.cluster_name,
-            color = "deepskyblue",
-            fontname = font
+            color="deepskyblue",
+            fontname=font
         )
         if self.subtree.iterator is None:
             subg.set_label(self.name)
