@@ -144,201 +144,201 @@ class RCubicGroup(object):
 
 
 class RCubicScriptParser(object):<<<<<<< HEAD
-	PHASES = {"DEFAULT":0, "EARLY":-1, "LATE":1}
-	def __init__(self, groups, logdir, workdir, whitelist, blacklist, regexval, resources):
-		self.groups = groups
-		self.logdir = logdir
-		self.workdir = workdir
-		if blacklist and whitelist:
-			logging.warning("Conflicting whitelist/blacklist option. Ignoring blacklist.")
-			blacklist = []
-		elif blacklist is None:
-			blacklist = []
-		elif whitelist is None:
-			whitelist =[]
-		self.blacklist = blacklist
-		self.whitelist = whitelist
-		if regexval is not None:
-			regexval = re.compile(regexval, re.MULTILINE)
-		self.regexval = regexval
-		self.resources = resources
-		self.unusedresources = []
-		self.tree = None
-		self.subtrees = {}
+    PHASES = {"DEFAULT":0, "EARLY":-1, "LATE":1}
+    def __init__(self, groups, logdir, workdir, whitelist, blacklist, regexval, resources):
+        self.groups = groups
+        self.logdir = logdir
+        self.workdir = workdir
+        if blacklist and whitelist:
+            logging.warning("Conflicting whitelist/blacklist option. Ignoring blacklist.")
+            blacklist = []
+        elif blacklist is None:
+            blacklist = []
+        elif whitelist is None:
+            whitelist =[]
+        self.blacklist = blacklist
+        self.whitelist = whitelist
+        if regexval is not None:
+            regexval = re.compile(regexval, re.MULTILINE)
+        self.regexval = regexval
+        self.resources = resources
+        self.unusedresources = []
+        self.tree = None
+        self.subtrees = {}
 
-	def scripts(self):
-		scripts = []
-		for group in self.groups:
-			for script in group.scripts:
-				scripts.append(script)
-		return scripts
+    def scripts(self):
+        scripts = []
+        for group in self.groups:
+            for script in group.scripts:
+                scripts.append(script)
+        return scripts
 
-	def read_dirs(self, directory, override=False):
-		failed_groups = []
-		for group in self.groups:
-			groupdir = "{0}/{1}".format(directory, group)
-			logging.debug("processing group {0} {1} {2}.".format(group.name, groupdir, override))
-			if not override:
-				if not os.path.exists(groupdir):
-					failed_groups.append(group)
-					continue
-				if group.fulloverride:
-					continue
-			else:
-				if not os.path.exists(groupdir):
-					continue
-			for filename in os.listdir(groupdir):
-				filepath = "{0}/{1}".format(groupdir, filename)
-				if filename.startswith("{0}_".format(group)):
-					rs = RCubicScript(
-						filepath,
-						group.version,
-						override,
-						group.phase,
-						self.logdir,
-						self.whitelist,
-						self.blacklist,
-						self.regexval,
-						group,
-					)
-					group.add_script(rs, override)
-				else:
-					logging.debug(
-							"Skipping {0}/{1}, does not start with {2}_."
-							.format(filepath, group)
-						)
+    def read_dirs(self, directory, override=False):
+        failed_groups = []
+        for group in self.groups:
+            groupdir = "{0}/{1}".format(directory, group)
+            logging.debug("processing group {0} {1} {2}.".format(group.name, groupdir, override))
+            if not override:
+                if not os.path.exists(groupdir):
+                    failed_groups.append(group)
+                    continue
+                if group.fulloverride:
+                    continue
+            else:
+                if not os.path.exists(groupdir):
+                    continue
+            for filename in os.listdir(groupdir):
+                filepath = "{0}/{1}".format(groupdir, filename)
+                if filename.startswith("{0}_".format(group)):
+                    rs = RCubicScript(
+                            filepath,
+                            group.version,
+                            override,
+                            group.phase,
+                            self.logdir,
+                            self.whitelist,
+                            self.blacklist,
+                            self.regexval,
+                            group,
+                    )
+                    group.add_script(rs, override)
+                else:
+                    logging.debug(
+                                    "Skipping {0}/{1}, does not start with {2}_."
+                                    .format(filepath, group)
+                            )
 
-	def _glob_expand(self, deps):
-		rval = []
-		for dep in deps:
-			matched = False
-			for script in self.scripts():
-				if fnmatch.fnmatchcase(script.name, dep):
-					#we return script names instead of job instances to let
-					#ExecTree handle dangling deps
-					rval.append(script.name)
-					matched = True
-			if not matched:
-				rval.append(dep)
-		return rval
+    def _glob_expand(self, deps):
+        rval = []
+        for dep in deps:
+            matched = False
+            for script in self.scripts():
+                if fnmatch.fnmatchcase(script.name, dep):
+                    # we return script names instead of job instances to let
+                    # ExecTree handle dangling deps
+                    rval.append(script.name)
+                    matched = True
+            if not matched:
+                rval.append(dep)
+        return rval
 
-	def eval_args(self, script):
-		logging.debug("iterator: {0}, cwd: {1}".format(script.iterator, self.workdir))
-		with open("/dev/null", "w") as devnull:
-			if hasattr(subprocess, "check_output"):
-				output = subprocess.check_output(script.iterator, stderr=devnull, cwd=self.workdir)
-			else:
-				p = subprocess.Popen(script.iterator, stdout=subprocess.PIPE, stderr=devnull, cwd=self.workdir)
-				output = p.communicate()[0]
-		seperator = re.compile("[,;\s]+")
-		args = seperator.split(output)
-		while "" in args:
-			args.remove("")
-		logging.debug("Arguments {0}".format(args))
-		return args
+    def eval_args(self, script):
+        logging.debug("iterator: {0}, cwd: {1}".format(script.iterator, self.workdir))
+        with open("/dev/null", "w") as devnull:
+            if hasattr(subprocess, "check_output"):
+                output = subprocess.check_output(script.iterator, stderr=devnull, cwd=self.workdir)
+            else:
+                p = subprocess.Popen(script.iterator, stdout=subprocess.PIPE, stderr=devnull, cwd=self.workdir)
+                output = p.communicate()[0]
+        seperator = re.compile("[,;\s]+")
+        args = seperator.split(output)
+        while "" in args:
+            args.remove("")
+        logging.debug("Arguments {0}".format(args))
+        return args
 
-	def set_href(self, gerrit, project, githash, repopath):
-		logging.debug("set hrefs")
-		for script in self.scripts():
-			script.href = "{0}/gitweb?p={1};a=blob;f={2};hb={3}".format(
-				gerrit, project, script.path[len(repopath)+1:], githash
-			)
+    def set_href(self, gerrit, project, githash, repopath):
+        logging.debug("set hrefs")
+        for script in self.scripts():
+            script.href = "{0}/gitweb?p={1};a=blob;f={2};hb={3}".format(
+                    gerrit, project, script.path[len(repopath)+1:], githash
+            )
 
-	def init_tree(self):
-		self.tree = exectree.ExecTree()
-		self.tree.cwd = self.workdir
-		self.tree.name = "rcubic"
+    def init_tree(self):
+        self.tree = exectree.ExecTree()
+        self.tree.cwd = self.workdir
+        self.tree.name = "rcubic"
 
-		#Initialize all sub trees
-		for script in self.scripts():
-			if len(script.iterator) > 0:
-				tree = exectree.ExecTree()
-				tree.cwd = self.workdir
-				tree.name = script.name
-				tree.iterator = exectree.ExecIter(
-					"{0}_iter".format(script.name),
-					self.eval_args(script)
-				)
-				self.subtrees[script.name] = tree
+        # Initialize all sub trees
+        for script in self.scripts():
+            if len(script.iterator) > 0:
+                tree = exectree.ExecTree()
+                tree.cwd = self.workdir
+                tree.name = script.name
+                tree.iterator = exectree.ExecIter(
+                        "{0}_iter".format(script.name),
+                        self.eval_args(script)
+                )
+                self.subtrees[script.name] = tree
 
-		#Initialize Resources
-		for resource, limit in self.resources.items():
-			exectree.ExecResource(self.tree, resource, limit)
+        # Initialize Resources
+        for resource, limit in self.resources.items():
+            exectree.ExecResource(self.tree, resource, limit)
 
-		#Initialize jobs and add to trees
-		for script in self.scripts():
-			script.job = exectree.ExecJob(
-				script.name,
-				script.path,
-				logfile=script.logfile,
-				arguments=[script.version],
-				href=script.href
-			)
-			if script.name in self.subtrees:
-				script.job.jobpath = None
-				script.job.subtree = self.subtrees[script.name]
-			if script.override:
-				script.job.tcolor = "deepskyblue"
-			for resource in script.resources:
-				r = self.tree.find_resource(resource)
-				if r is None:
-					if resource not in self.unusedresources:
-						self.unusedresources.append(resource)
-				else:
-					script.job.resources.append(r)
-			if script.idep is None:
-				self.tree.add_job(script.job)
-			else:
-				#todo handle exception nicely
-				self.subtrees[script.idep].add_job(script.job)
-		#Check for undefined resources
-		if len(self.unusedresources) > 0:
-			logging.warning(
-				"Resources referenced but not defined: {0}."
-				.format(", ".join(self.unusedresources))
-			)
+        # Initialize jobs and add to trees
+        for script in self.scripts():
+            script.job = exectree.ExecJob(
+                    script.name,
+                    script.path,
+                    logfile=script.logfile,
+                    arguments=[script.version],
+                    href=script.href
+            )
+            if script.name in self.subtrees:
+                script.job.jobpath = None
+                script.job.subtree = self.subtrees[script.name]
+            if script.override:
+                script.job.tcolor = "deepskyblue"
+            for resource in script.resources:
+                r = self.tree.find_resource(resource)
+                if r is None:
+                    if resource not in self.unusedresources:
+                        self.unusedresources.append(resource)
+                else:
+                    script.job.resources.append(r)
+            if script.idep is None:
+                self.tree.add_job(script.job)
+            else:
+                # todo handle exception nicely
+                self.subtrees[script.idep].add_job(script.job)
+        # Check for undefined resources
+        if len(self.unusedresources) > 0:
+            logging.warning(
+                    "Resources referenced but not defined: {0}."
+                    .format(", ".join(self.unusedresources))
+            )
 
-		#Initialize and set up dependencies
-		for script in self.scripts():
-			logging.debug("proccessing script: {0}".format(script.name))
-			if script.idep is None:
-				tree = self.tree
-			else:
-				tree = self.subtrees[script.idep]
+        # Initialize and set up dependencies
+        for script in self.scripts():
+            logging.debug("proccessing script: {0}".format(script.name))
+            if script.idep is None:
+                tree = self.tree
+            else:
+                tree = self.subtrees[script.idep]
 
-			for dep in self._glob_expand(script.hdep):
-				try:
-					d = tree.add_dep(dep, script.job)
-				except exectree.JobUndefinedError:
-					if script.job.is_defined():
-						raise
-					dep = exectree.ExecJob(dep, "-", mustcomplete=False)
-					tree.add_job(dep)
-					d = tree.add_dep(dep, script.job)
-				d.color = {"defined":"deepskyblue", "undefined":"red"}
-			for dep in self._glob_expand(script.sdep):
-				try:
-					d = tree.add_dep(dep, script.job)
-				except exectree.JobUndefinedError:
-					dep = exectree.ExecJob(dep, "-", mustcomplete=False)
-					tree.add_job(dep)
-					d = tree.add_dep(dep, script.job)
-				d.color = {"defined":"lawngreen", "undefined":"palegreen"}
-			for cdep in self._glob_expand(script.cdep):
-				try:
-					d = tree.add_dep(script.job, dep)
-				except exectree.JobUndefinedError:
-					dep = exectree.ExecJob(dep, "-", mustcomplete=False)
-					tree.add_job(dep)
-					d = tree.add_dep(script.job, dep)
-				d.color = {"defined":"lawngreen", "undefined":"palegreen"}
-			#stems = self.tree.stems()
-			for pdep in self.scripts():
-				#if pdep.phase < script.phase and pdep.job in stems:
-				if pdep.phase < script.phase and pdep.idep is None and script.idep is None:
-					d = tree.add_dep(pdep.job, script.job)
-					if d is None:
-						continue
-					d.color = {"defined":"gold2", "undefined":"gold2"}
-		#logging.debug("tree:\n{0}".format(etree.tostring(self.tree.xml(), pretty_print=True)))
-		return self.tree
+            for dep in self._glob_expand(script.hdep):
+                try:
+                    d = tree.add_dep(dep, script.job)
+                except exectree.JobUndefinedError:
+                    if script.job.is_defined():
+                        raise
+                    dep = exectree.ExecJob(dep, "-", mustcomplete=False)
+                    tree.add_job(dep)
+                    d = tree.add_dep(dep, script.job)
+                d.color = {"defined":"deepskyblue", "undefined":"red"}
+            for dep in self._glob_expand(script.sdep):
+                try:
+                    d = tree.add_dep(dep, script.job)
+                except exectree.JobUndefinedError:
+                    dep = exectree.ExecJob(dep, "-", mustcomplete=False)
+                    tree.add_job(dep)
+                    d = tree.add_dep(dep, script.job)
+                d.color = {"defined":"lawngreen", "undefined":"palegreen"}
+            for cdep in self._glob_expand(script.cdep):
+                try:
+                    d = tree.add_dep(script.job, dep)
+                except exectree.JobUndefinedError:
+                    dep = exectree.ExecJob(dep, "-", mustcomplete=False)
+                    tree.add_job(dep)
+                    d = tree.add_dep(script.job, dep)
+                d.color = {"defined":"lawngreen", "undefined":"palegreen"}
+            # stems = self.tree.stems()
+            for pdep in self.scripts():
+                # if pdep.phase < script.phase and pdep.job in stems:
+                if pdep.phase < script.phase and pdep.idep is None and script.idep is None:
+                    d = tree.add_dep(pdep.job, script.job)
+                    if d is None:
+                        continue
+                    d.color = {"defined":"gold2", "undefined":"gold2"}
+        # logging.debug("tree:\n{0}".format(etree.tostring(self.tree.xml(), pretty_print=True)))
+        return self.tree
