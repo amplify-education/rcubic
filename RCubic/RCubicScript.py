@@ -155,7 +155,7 @@ class RCubicScriptParser(object):<<<<<<< HEAD
         elif blacklist is None:
             blacklist = []
         elif whitelist is None:
-            whitelist =[]
+            whitelist = []
         self.blacklist = blacklist
         self.whitelist = whitelist
         if regexval is not None:
