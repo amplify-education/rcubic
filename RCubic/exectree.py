@@ -818,13 +818,10 @@ class ExecTree(object):
     def find_subtree(self, uuid, default=None):
         return dict_by_attr(self.subtrees, 'uuid').get(uuid, default)
 
-    def find_jobs(self, needle, default=[]):
+    def find_jobs(self, needle, default=None):
         """ Find all jobs based on their name / uuid """
         rval = [n for n in self.jobs if fnmatch.fnmatchcase(n.name, needle) or n.name.uuid.hex == needle]
-        if rval:
-            return rval
-        else:
-            return default
+        return rval or default or []
 
     def find_job(self, needle, default=None):
         """ Find job based on name or uuid """
@@ -966,7 +963,7 @@ class ExecTree(object):
 
     # dot's html map output is: "x,y x,y x,y"
     # but it should be: "x,y,x,y,x,y"
-    FIXCOORD = re.compile(' (?=[\d]*,[\d]*)')
+    FIXCOORD = re.compile(r' (?=[\d]*,[\d]*)')
 
     def write_status(self, svg, json, overwrite=False, arborescent=True):
         if overwrite or not os.path.exists(svg):
