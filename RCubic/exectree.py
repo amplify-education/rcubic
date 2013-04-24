@@ -1004,9 +1004,7 @@ class ExecTree(object):
         stems = self.stems()
 
         if len(stems) == 0:
-            errors.append("Tree {0} is empty, has 0 stems."
-                .format(self.name, stems)
-            )
+            errors.append("Tree {0} is empty, has 0 stems.".format(self.name))
         elif len(stems) > 1:
             errors.append(
                 "Tree {0} has multiple stems ({1})."
