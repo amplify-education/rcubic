@@ -87,14 +87,14 @@ class ExecJob(object):
     UNDEF_JOB = "-"
 
     STATE_COLORS = {
-        STATE_IDLE:"white",
-        STATE_RUNNING:"yellow",
-        STATE_SUCCESSFULL:"lawngreen",
-        STATE_FAILED:"red",
-        STATE_CANCELLED:"deepskyblue",
-        STATE_UNDEF:"gray",
-        STATE_BLOCKED:"darkorange",
-        STATE_RESET:"white"
+        STATE_IDLE: "white",
+        STATE_RUNNING: "yellow",
+        STATE_SUCCESSFULL: "lawngreen",
+        STATE_FAILED: "red",
+        STATE_CANCELLED: "deepskyblue",
+        STATE_UNDEF: "gray",
+        STATE_BLOCKED: "darkorange",
+        STATE_RESET: "white"
     }
 
     def __init__(self, name="", jobpath=None, tree=None, logfile=None, xml=None, execiter=None, mustcomplete=True, subtree=None, arguments=None, resources=None, href="", tcolor="lavender"):
@@ -178,11 +178,11 @@ class ExecJob(object):
     def xml(self):
         """ Generate xml Element object representing of ExecJob """
         args = {
-            "name":str(self.name),
-            "uuid":str(self.uuid.hex),
-            "mustcomplete":str(self.mustcomplete),
-            "href":str(self.href),
-            "tcolor":self.tcolor
+            "name": str(self.name),
+            "uuid": str(self.uuid.hex),
+            "mustcomplete": str(self.mustcomplete),
+            "href": str(self.href),
+            "tcolor": self.tcolor
         }
         if self.jobpath is not None:
             args["jobpath"] = str(self.jobpath)
@@ -196,11 +196,11 @@ class ExecJob(object):
 
         if self.arguments is not None:
             for arg in self.arguments:
-                eti.append(et.Element("execArg", {"value":arg}))
+                eti.append(et.Element("execArg", {"value": arg}))
 
         if self.resources is not None:
             for resource in self.resources:
-                eti.append(et.Element("execResource", {"uuid":str(resource.uuid.hex)}))
+                eti.append(et.Element("execResource", {"uuid": str(resource.uuid.hex)}))
 
         return eti
 
@@ -489,7 +489,7 @@ class ExecJob(object):
             return ""
         try:
             with open(self.logfile, 'r') as fd:
-                fd.seek(0,2)
+                fd.seek(0, 2)
                 filesize = fd.tell()
                 fd.seek(max(-size, -filesize), 2)
                 return fd.read()
@@ -622,9 +622,9 @@ class ExecResource(object):
 
     def xml(self):
         args = {
-            "name":str(self.name),
-            "uuid":str(self.uuid.hex),
-            "avail":str(self.avail),
+            "name": str(self.name),
+            "uuid": str(self.uuid.hex),
+            "avail": str(self.avail),
         }
         eri = et.Element("execResource", args)
         return eri
@@ -661,7 +661,7 @@ class ExecDependency(object):
     def __init__(self, parent, child, state=ExecJob.STATE_SUCCESSFULL):
         self.parent = parent
         self.child = child
-        self.color = {"undefined":"palegreen", "defined":"deepskyblue"}
+        self.color = {"undefined": "palegreen", "defined": "deepskyblue"}
 
         if state in ExecJob.STATES:
             self.state = state
@@ -709,7 +709,7 @@ class ExecDependency(object):
 
     def xml(self):
         """ Generate xml Element object representing the depedency """
-        args = {"parent":self.parent.uuid.hex, "child":self.child.uuid.hex, "state":`self.state`, "dcolor":self.color["defined"], "ucolor":self.color["undefined"]}
+        args = {"parent": self.parent.uuid.hex, "child": self.child.uuid.hex, "state": `self.state`, "dcolor": self.color["defined"], "ucolor": self.color["undefined"]}
         eti = et.Element("execDependency", args)
         return eti
 
@@ -774,11 +774,11 @@ class ExecTree(object):
 
     def xml(self):
         args = {
-            "version":"1.0",
-            "name":self.name,
-            "href":self.href,
-            "uuid":self.uuid.hex,
-            "cwd":self.cwd
+            "version": "1.0",
+            "name": self.name,
+            "href": self.href,
+            "uuid": self.uuid.hex,
+            "cwd": self.cwd
         }
         eti = et.Element("execTree", args)
         for job in self.jobs:
@@ -792,7 +792,7 @@ class ExecTree(object):
         for resource in self.resources:
             eti.append(resource.xml())
         for key, value in self.legend.iteritems():
-            eti.append(et.Element("legendItem", {key:value}))
+            eti.append(et.Element("legendItem", {key: value}))
         return eti
 
     def __str__(self):
@@ -852,7 +852,7 @@ class ExecTree(object):
             parent = xml.attrib["parent"]
             child = xml.attrib["child"]
             state = int(xml.attrib["state"])
-            colors = {"undefined":xml.attrib["ucolor"], "defined":xml.attrib["dcolor"]}
+            colors = {"undefined": xml.attrib["ucolor"], "defined": xml.attrib["dcolor"]}
 
         # Ensure parent and child are ExecJobs
         if not isinstance(parent, ExecJob):
@@ -954,8 +954,8 @@ class ExecTree(object):
             status = {}
         for job in self._rjobs():
             status[job.name] = {
-                "status":job.STATE_COLORS[job.state],
-                "progress":job.progress
+                "status": job.STATE_COLORS[job.state],
+                "progress": job.progress
             }
             if job.subtree is not None and job.subtree.iterator is not None:
                 status[job.name]["iteration"] = "{0}/{1}".format(
