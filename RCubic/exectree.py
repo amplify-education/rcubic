@@ -38,6 +38,8 @@ import gevent
 from gevent import (Greenlet, event, socket)
 import pydot
 
+from RCubic.RCubicUtilities import dict_by_attr
+
 
 class TreeDefinedError(RuntimeError):
     pass
@@ -808,10 +810,7 @@ class ExecTree(object):
         return "<ExecTree {0}>".format(self.name)
 
     def __getitem__(self, key, default=None):
-        for job in self.jobs:
-            if job.name == key:
-                return job
-        return default
+        return dict_by_attr(self.jobs, 'name').get(key, default)
 
     def find_resource(self, needle, default=None):
         for resource in self.resources:
@@ -822,10 +821,7 @@ class ExecTree(object):
         return default
 
     def find_subtree(self, uuid, default=None):
-        for subtree in self.subtrees:
-            if subtree.uuid == uuid:
-                return subtree
-        return default
+        return dict_by_attr(self.subtrees, 'uuid').get(uuid, default)
 
     def find_jobs(self, needle, default=[]):
         """ Find all jobs based on their name / uuid """
