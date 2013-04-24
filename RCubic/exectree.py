@@ -594,7 +594,7 @@ class ExecIter(object):
         if len(self.args) <= 0:
             return ""
         elif self.run > len(self.args):
-            return self.args[len(self.args)-1]
+            return self.args[-1]
         return self.args[self.run]
 
 
