@@ -145,6 +145,7 @@ class RCubicGroup(object):
 
 class RCubicScriptParser(object): <<<<<<< HEAD
     PHASES = {"DEFAULT": 0, "EARLY": -1, "LATE": 1}
+
     def __init__(self, groups, logdir, workdir, whitelist, blacklist, regexval, resources):
         self.groups = groups
         self.logdir = logdir
