@@ -2,7 +2,10 @@ language: python
 
 python:
     - "2.7"
-    - "2.6"
+# ERROR: Detect dependencies between jobs in different trees
+# with self.assertRaises(exectree.JobUndefinedError):
+# TypeError: failUnlessRaises() takes at least 3 arguments (2 given)
+#    - "2.6"
 # gevent does not build in python 3.3 because of print_function
 #    - "3.3"
 # gevent does not build in pypy because of missing fields
