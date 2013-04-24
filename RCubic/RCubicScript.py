@@ -231,7 +231,7 @@ class RCubicScriptParser(object):
             else:
                 p = subprocess.Popen(script.iterator, stdout=subprocess.PIPE, stderr=devnull, cwd=self.workdir)
                 output = p.communicate()[0]
-        seperator = re.compile("[,;\s]+")
+        seperator = re.compile(r"[,;\s]+")
         args = seperator.split(output)
         while "" in args:
             args.remove("")
