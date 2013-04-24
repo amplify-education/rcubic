@@ -100,10 +100,8 @@ class ExecJob(object):
     }
 
     def __init__(self, name="", jobpath=None, tree=None, logfile=None, xml=None, execiter=None, mustcomplete=True, subtree=None, arguments=None, resources=None, href="", tcolor="lavender"):
-        if arguments is None:
-            arguments = []
-        if resources is None:
-            resources = []
+        arguments = arguments or []
+        resources = resources or []
         if xml is not None:
             if tree is None:
                 # TODO make tree param required
@@ -148,8 +146,7 @@ class ExecJob(object):
                 fr = tree.find_resource(resource.attrib["uuid"])
                 if fr is not None:
                     resources.append(fr)
-            if logfile == "":
-                logfile = None
+            logfile = logfile or None
             if jobpath == "":
                 jobpath = None
             elif subtreeuuid is not None:
