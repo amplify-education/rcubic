@@ -469,7 +469,7 @@ class ExecJob(object):
                     reserved.append(resource)
                     lastacquire = True
                 else:
-                    lastacquire  = False
+                    lastacquire = False
                     break
             if lastacquire == False:
                 attempt += 1
