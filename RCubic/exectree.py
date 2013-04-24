@@ -808,9 +808,7 @@ class ExecTree(object):
 
     def find_resource(self, needle, default=None):
         for resource in self.resources:
-            if resource.uuid.hex == needle:
-                return resource
-            elif resource.name == needle:
+            if needle in (resource.uuid.hex, resource.name):
                 return resource
         return default
 
@@ -825,9 +823,7 @@ class ExecTree(object):
     def find_job(self, needle, default=None):
         """ Find job based on name or uuid """
         for job in self.jobs:
-            if job.name == needle:
-                return job
-            elif job.uuid.hex == needle:
+            if needle in (job.name, job.uuid.hex):
                 return job
         return default
 
