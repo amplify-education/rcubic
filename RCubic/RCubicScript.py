@@ -75,11 +75,13 @@ class RCubicScript(object):
 
     def _param_split(self, param):
         # Warning: code change not covered in tests
+        # Split output by delimiters, eliminate empty strings
         separator = re.compile(r"[,;\s]+")
         return filter(None, separator.split(param)) if param else []
 
     def _parseHeaderLine(self, line):
         # Warning: code change not covered in tests
+        # Split output by delimiters, eliminate empty strings
         begin = re.compile(r"^#[A-Z0-9]+:[\s]*")
         separator = re.compile(r"[,;\s]+")
         return filter(None, separator.split(begin.sub("", line, 1)))
@@ -221,10 +223,11 @@ class RCubicScriptParser(object):
             else:
                 p = subprocess.Popen(script.iterator, stdout=subprocess.PIPE, stderr=devnull, cwd=self.workdir)
                 output = p.communicate()[0]
-        seperator = re.compile(r"[,;\s]+")
-        args = seperator.split(output)
-        while "" in args:
-            args.remove("")
+
+        # Split output by delimiters, eliminate empty strings
+        separator = re.compile(r"[,;\s]+")
+        args = filter(None, separator.split(output))
+
         logging.debug("Arguments {0}".format(args))
         return args
 
