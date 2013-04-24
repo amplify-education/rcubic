@@ -397,7 +397,6 @@ class ExecJob(object):
         real_stdout = p.stdout if stdout == subprocess.PIPE else stdout
         fcntl.fcntl(real_stdout, fcntl.F_SETFL, os.O_NONBLOCK)	# make the file nonblocking
 
-
         if data:
             bytes_total = len(data)
             bytes_written = 0
@@ -450,7 +449,6 @@ class ExecJob(object):
         logging.debug("Canceling {0}".format(self.name))
         self.state = self.STATE_CANCELLED
         return True
-
 
     def _release_resources(self, resources):
         logging.debug("releasing: {0}".format(resources))
@@ -1040,7 +1038,6 @@ class ExecTree(object):
             errors.extend(job.validate())
 
         return errors
-
 
     def validate_nocycles(self, job, visited, parents=None):
         """ Ensure we do not have cyclical dependencies in the tree """
