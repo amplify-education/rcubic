@@ -41,20 +41,36 @@ import pydot
 
 class TreeDefinedError(RuntimeError):
     pass
+
+
 class TreeUndefinedError(RuntimeError):
     pass
+
+
 class JobDefinedError(RuntimeError):
     pass
+
+
 class JobError(RuntimeError):
     pass
+
+
 class JobUndefinedError(RuntimeError):
     pass
+
+
 class UnknownStateError(RuntimeError):
     pass
+
+
 class DependencyError(RuntimeError):
     pass
+
+
 class XMLError(RuntimeError):
     pass
+
+
 class IterratorOverrunError(RuntimeError):
     pass
 
@@ -548,6 +564,7 @@ class ExecJob(object):
             self.state = self.STATE_FAILED
             return False
 
+
 class ExecIter(object):
     def __init__(self, name=None, args=None):
         if args == None:
@@ -581,6 +598,7 @@ class ExecIter(object):
         elif self.run > len(self.args):
             return self.args[len(self.args)-1]
         return self.args[self.run]
+
 
 class ExecResource(object):
     def __init__(self, tree, name="", avail=0, xml=None):
@@ -637,6 +655,7 @@ class ExecResource(object):
         else:
             self.used -=1
         self.event.set()
+
 
 class ExecDependency(object):
     def __init__(self, parent, child, state=ExecJob.STATE_SUCCESSFULL):
