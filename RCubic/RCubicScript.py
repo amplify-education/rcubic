@@ -242,7 +242,7 @@ class RCubicScriptParser(object):
         logging.debug("set hrefs")
         for script in self.scripts():
             script.href = "{0}/gitweb?p={1};a=blob;f={2};hb={3}".format(
-                gerrit, project, script.path[len(repopath)+1:], githash
+                gerrit, project, script.path[len(repopath) + 1:], githash
             )
 
     def init_tree(self):
