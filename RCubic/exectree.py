@@ -395,7 +395,7 @@ class ExecJob(object):
         real_stdin = p.stdin if stdin == subprocess.PIPE else stdin
         fcntl.fcntl(real_stdin, fcntl.F_SETFL, os.O_NONBLOCK)  # make the file nonblocking
         real_stdout = p.stdout if stdout == subprocess.PIPE else stdout
-        fcntl.fcntl(real_stdout, fcntl.F_SETFL, os.O_NONBLOCK)	# make the file nonblocking
+        fcntl.fcntl(real_stdout, fcntl.F_SETFL, os.O_NONBLOCK)  # make the file nonblocking
 
         if data:
             bytes_total = len(data)
