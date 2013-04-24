@@ -71,14 +71,14 @@ class ExecJob(object):
     UNDEF_JOB = "-"
 
     STATE_COLORS = {
-                    STATE_IDLE:"white",
-                    STATE_RUNNING:"yellow",
-                    STATE_SUCCESSFULL:"lawngreen",
-                    STATE_FAILED:"red",
-                    STATE_CANCELLED:"deepskyblue",
-                    STATE_UNDEF:"gray",
-                    STATE_BLOCKED:"darkorange",
-                    STATE_RESET:"white"
+        STATE_IDLE:"white",
+        STATE_RUNNING:"yellow",
+        STATE_SUCCESSFULL:"lawngreen",
+        STATE_FAILED:"red",
+        STATE_CANCELLED:"deepskyblue",
+        STATE_UNDEF:"gray",
+        STATE_BLOCKED:"darkorange",
+        STATE_RESET:"white"
     }
 
     def __init__(self, name="", jobpath=None, tree=None, logfile=None, xml=None, execiter=None, mustcomplete=True, subtree=None, arguments=None, resources=None, href="", tcolor="lavender"):
@@ -109,11 +109,11 @@ class ExecJob(object):
                     arguments.append(arg.attrib["value"])
                 except KeyError:
                     logging.error(
-                            "Argument of is missing required xml attribute ({0}:{1})."
-                            .format(
-                                    legenditem.base,
-                                    legenditem.sourceline
-                            )
+                        "Argument of is missing required xml attribute ({0}:{1})."
+                        .format(
+                            legenditem.base,
+                            legenditem.sourceline
+                        )
                     )
                     raise
             resources = []
@@ -130,7 +130,7 @@ class ExecJob(object):
                 subtree = tree.find_subtree(subtreeuuid, None)
                 if subtree is None:
                     raise TreeDefinedError(
-                            "The referenced subtree cannot be found."
+                        "The referenced subtree cannot be found."
                     )
 
         else:
@@ -162,11 +162,11 @@ class ExecJob(object):
     def xml(self):
         """ Generate xml Element object representing of ExecJob """
         args = {
-                "name":str(self.name),
-                "uuid":str(self.uuid.hex),
-                "mustcomplete":str(self.mustcomplete),
-                "href":str(self.href),
-                "tcolor":self.tcolor
+            "name":str(self.name),
+            "uuid":str(self.uuid.hex),
+            "mustcomplete":str(self.mustcomplete),
+            "href":str(self.href),
+            "tcolor":self.tcolor
         }
         if self.jobpath is not None:
             args["jobpath"] = str(self.jobpath)
@@ -207,7 +207,7 @@ class ExecJob(object):
                 self.state = self.STATE_UNDEF
         else:
             raise JobError(
-                    "jobpath cannot be modified after job has been started"
+                "jobpath cannot be modified after job has been started"
             )
 
     @property
@@ -250,12 +250,12 @@ class ExecJob(object):
         else:
             label = self.name
         kw = {
-                "style" : "filled",
-                "fillcolor" : self.STATE_COLORS[self.state],
-                "color" : self.tcolor,
-                "penwidth" : "3",
-                "fontname" : font,
-                }
+            "style" : "filled",
+            "fillcolor" : self.STATE_COLORS[self.state],
+            "color" : self.tcolor,
+            "penwidth" : "3",
+            "fontname" : font,
+        }
         if self.href:
             kw["href"] = "\"{0}\"".format(self.href)
         node = pydot.Node(label, **kw)
@@ -263,20 +263,20 @@ class ExecJob(object):
 
     def _dot_tree(self, font):
         subg = pydot.Subgraph(
-                        self.subtree.cluster_name,
-                        color = "deepskyblue",
-                        fontname = font
-                )
+            self.subtree.cluster_name,
+            color = "deepskyblue",
+            fontname = font
+        )
         if self.subtree.iterator is None:
             subg.set_label(self.name)
         else:
             subg.set_label(
-                    "{0} {1}/{2}".
-                    format(
-                            self.name,
-                            self.subtree.iterator.run,
-                            self.subtree.iterator.len()
-                    )
+                "{0} {1}/{2}".
+                format(
+                    self.name,
+                    self.subtree.iterator.run,
+                    self.subtree.iterator.len()
+                )
             )
         self.subtree.dot_graph(subg)
         return subg
@@ -324,8 +324,8 @@ class ExecJob(object):
         errors = []
         if self.jobpath is not None and self.subtree is not None:
             errors.append(
-                    "subtree and jobpath of {0} are set. Only one can be set."
-                    .format(self.name)
+                "subtree and jobpath of {0} are set. Only one can be set."
+                .format(self.name)
             )
         elif self.jobpath is not None:
             if self.jobpath == self.UNDEF_JOB:
@@ -333,14 +333,14 @@ class ExecJob(object):
                 pass
             elif not os.path.exists(self.jobpath):
                 errors.append(
-                        "{0}File {1} for needed by job {2} does not exist."
-                        .format(prepend, self.jobpath, self.name)
+                    "{0}File {1} for needed by job {2} does not exist."
+                    .format(prepend, self.jobpath, self.name)
                 )
             else:
                 if not os.access(self.jobpath, os.X_OK):
                     errors.append(
-                            "{0}File {1} for needed by job {2} is not executable."
-                            .format(prepend, self.jobpath, self.name)
+                        "{0}File {1} for needed by job {2} is not executable."
+                        .format(prepend, self.jobpath, self.name)
                     )
         elif self.subtree is not None:
             errors.extend(self.subtree.validate())
@@ -519,15 +519,15 @@ class ExecJob(object):
                 if self.logfile is not None:
                     with open(self.logfile, 'a') as fd:
                         rcode = self._popen(
-                                args,
-                                cwd=self.tree.cwd,
-                                stdout=fd,
-                                stderr=fd
+                            args,
+                            cwd=self.tree.cwd,
+                            stdout=fd,
+                            stderr=fd
                         )
                 else:
                     rcode = self._popen(
-                            args,
-                            cwd=self.tree.cwd
+                        args,
+                        cwd=self.tree.cwd
                     )
             elif self.subtree is not None:
                 logging.debug("starting {0} {1}".format(self.name, "subtree"))
@@ -604,9 +604,9 @@ class ExecResource(object):
 
     def xml(self):
         args = {
-                "name":str(self.name),
-                "uuid":str(self.uuid.hex),
-                "avail":str(self.avail),
+            "name":str(self.name),
+            "uuid":str(self.uuid.hex),
+            "avail":str(self.avail),
         }
         eri = et.Element("execResource", args)
         return eri
@@ -738,11 +738,11 @@ class ExecTree(object):
                     self.legend[key] = value
                 except KeyError:
                     logging.error(
-                            "Legend item is missing required xml attribute ({0}:{1})."
-                            .format(
-                                    legenditem.base,
-                                    legenditem.sourceline
-                            )
+                        "Legend item is missing required xml attribute ({0}:{1})."
+                        .format(
+                            legenditem.base,
+                            legenditem.sourceline
+                        )
                     )
                     raise
 
@@ -755,11 +755,11 @@ class ExecTree(object):
 
     def xml(self):
         args = {
-                "version":"1.0",
-                "name":self.name,
-                "href":self.href,
-                "uuid":self.uuid.hex,
-                "cwd":self.cwd
+            "version":"1.0",
+            "name":self.name,
+            "href":self.href,
+            "uuid":self.uuid.hex,
+            "cwd":self.cwd
         }
         eti = et.Element("execTree", args)
         for job in self.jobs:
@@ -885,10 +885,10 @@ class ExecTree(object):
     def dot_graph(self, graph=None, arborescent=False, font="sans-serif"):
         if graph is None:
             graph = pydot.Dot(
-                    graph_type="digraph",
-                    bgcolor="black",
-                    fontcolor="deepskyblue",
-                    fontname=font
+                graph_type="digraph",
+                bgcolor="black",
+                fontcolor="deepskyblue",
+                fontname=font
             )
         for job in self.jobs:
             job.dot(graph, font)
@@ -909,15 +909,15 @@ class ExecTree(object):
             legend = "\"{0}\"".format(legend)
             sg = pydot.Subgraph("noncelegendnonce", rank="sink")
             sg.add_node(
-                    pydot.Node(
-                            "noncelegendnonce",
-                            shape="box",
-                            margin="0",
-                            label=legend,
-                            color="deepskyblue",
-                            fontcolor="deepskyblue",
-                            fontname=font
-                    )
+                pydot.Node(
+                    "noncelegendnonce",
+                    shape="box",
+                    margin="0",
+                    label=legend,
+                    color="deepskyblue",
+                    fontcolor="deepskyblue",
+                    fontname=font
+                )
             )
             graph.add_subgraph(sg)
         return graph
@@ -935,13 +935,13 @@ class ExecTree(object):
             status = {}
         for job in self._rjobs():
             status[job.name] = {
-                    "status":job.STATE_COLORS[job.state],
-                    "progress":job.progress
+                "status":job.STATE_COLORS[job.state],
+                "progress":job.progress
             }
             if job.subtree is not None and job.subtree.iterator is not None:
                 status[job.name]["iteration"] = "{0}/{1}".format(
-                        job.subtree.iterator.run,
-                        job.subtree.iterator.len()
+                    job.subtree.iterator.run,
+                    job.subtree.iterator.len()
                 )
         return simplejson.dumps(status)
 
@@ -988,15 +988,15 @@ class ExecTree(object):
 
         if len(stems) == 0:
             errors.append("Tree {0} is empty, has 0 stems."
-                    .format(self.name, stems)
+                .format(self.name, stems)
             )
         elif len(stems) > 1:
             errors.append(
-                    "Tree {0} has multiple stems ({1})."
-                    .format(
-                            self.name,
-                            " ".join([stem.name for stem in stems])
-                    )
+                "Tree {0} has multiple stems ({1})."
+                .format(
+                    self.name,
+                    " ".join([stem.name for stem in stems])
+                )
             )
 
         for stem in stems:
@@ -1013,8 +1013,8 @@ class ExecTree(object):
                     unconnected.append(job)
             if len(unconnected) > 0:
                 errors.append(
-                        "The jobs {0} are not connected to {1}."
-                        .format([job.name for job in unconnected], stem.name)
+                    "The jobs {0} are not connected to {1}."
+                    .format([job.name for job in unconnected], stem.name)
                 )
 
         for job in self.jobs:
@@ -1078,18 +1078,18 @@ class ExecTree(object):
             try:
                 with gevent.Timeout(timeout):
                     logging.debug(
-                            "Jobs have been spun up for {0}. I'm gonna chill"
-                            .format(self.name)
+                        "Jobs have been spun up for {0}. I'm gonna chill"
+                        .format(self.name)
                     )
                     gevent.sleep(1)
                     logging.debug(
-                            "Chilling is done. Impatiently waiting for jobs of {0} to finish"
-                            .format(self.name)
+                        "Chilling is done. Impatiently waiting for jobs of {0} to finish"
+                        .format(self.name)
                     )
                     self.join()
                     logging.debug(
-                            "Tree {0} has finished execution."
-                            .format(self.name)
+                        "Tree {0} has finished execution."
+                        .format(self.name)
                     )
             except gevent.timeout.Timeout:
                 logging.warning("Execution of tree exceeded time limit ({0} seconds).".format(timeout))
