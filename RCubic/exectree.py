@@ -653,7 +653,7 @@ class ExecResource(object):
         if self.used <= 0:
             self.used = 0
         else:
-            self.used -=1
+            self.used -= 1
         self.event.set()
 
 
@@ -921,7 +921,7 @@ class ExecTree(object):
         else:
             for dep in self.deps:
                 dep.dot(graph)
-        if len(self.legend)>0:
+        if len(self.legend) > 0:
             legend = ""
             for key, value in self.legend.iteritems():
                 legend = "{2}{0}:\t{1}\\n".format(key, value, legend)
