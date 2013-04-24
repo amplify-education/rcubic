@@ -143,7 +143,7 @@ class RCubicGroup(object):
         self.scripts.append(rs)
 
 
-class RCubicScriptParser(object): <<<<<<< HEAD
+class RCubicScriptParser(object):
     PHASES = {"DEFAULT": 0, "EARLY": -1, "LATE": 1}
 
     def __init__(self, groups, logdir, workdir, whitelist, blacklist, regexval, resources):
