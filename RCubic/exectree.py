@@ -514,8 +514,7 @@ class ExecJob(object):
         if not self._acquire_resources():
             self.state = self.STATE_FAILED
             logging.warning(
-                    "Resource deadlock prevention exceeded max attemps for {0}.".
-                    format(self.name)
+                "Resource deadlock prevention exceeded max attempts for {0}.".format(self.name)
             )
             return False
 
