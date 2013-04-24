@@ -281,7 +281,7 @@ class ExecJob(object):
             "fontname": font,
         }
         if self.href:
-            kw["href"] = "\"{0}\"".format(self.href)
+            kw["href"] = '"{0}"'.format(self.href)
         node = pydot.Node(label, **kw)
         return node
 
@@ -775,8 +775,7 @@ class ExecTree(object):
     def cluster_name(self):
         # pydot does not properly handle space in subtree
         name = self.name.replace(" ", "_")
-        return "\"cluster_{0}\"".format(name)
-        # return "\"cluster_{0}\"".format(self.name)
+        return '"cluster_{0}"'.format(name)
 
     def xml(self):
         args = {
@@ -922,7 +921,7 @@ class ExecTree(object):
             legend = ""
             for key, value in self.legend.iteritems():
                 legend = "{2}{0}:\t{1}\\n".format(key, value, legend)
-            legend = "\"{0}\"".format(legend)
+            legend = '"{0}"'.format(legend)
             sg = pydot.Subgraph("noncelegendnonce", rank="sink")
             sg.add_node(
                 pydot.Node(
