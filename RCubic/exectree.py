@@ -471,7 +471,7 @@ class ExecJob(object):
                 else:
                     lastacquire = False
                     break
-            if lastacquire == False:
+            if not lastacquire:
                 attempt += 1
                 self._release_resources(reserved)
                 gevent.sleep(backofftime + random.randint(0, acquire_timeout))
