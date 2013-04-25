@@ -77,6 +77,7 @@ class IterratorOverrunError(RuntimeError):
     pass
 
 
+# pylint: disable=W0201
 # class ExecJob(Greenlet):
 class ExecJob(object):
     STATES = (0, 1, 2, 3, 4, 5, 6, 7)
@@ -170,7 +171,7 @@ class ExecJob(object):
         self.subtree = subtree
         self.jobpath = jobpath
         # pylint reports _jobpath created outside __init__ without this statement
-        self._jobpath = None
+        # self._jobpath = None
         self.execiter = execiter
         self.mustcomplete = mustcomplete
         self.logfile = logfile
@@ -704,7 +705,7 @@ class ExecTree(object):
         self.done_event = gevent.event.Event()
         self._done = False
         # pylint reports self.done created outside __init__ without this line
-        self.done = False
+        # self.done = False
         self.resources = []
         self.cancelled = False
         self.started = False
