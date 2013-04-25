@@ -160,9 +160,7 @@ class ExecJob(object):
         else:
             uuidi = uuid.uuid4()
 
-        self.events = {}
-        for e in self.STATES:
-            self.events[e] = gevent.event.Event()
+        self.events = dict((e, gevent.event.Event()) for e in self.STATES)
         self.statechange = gevent.event.Event()
         self.name = name
         self.uuid = uuidi
