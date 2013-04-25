@@ -21,4 +21,4 @@ install:
 script:
   - pep8 --ignore=E501 RCubic/*.py
   - pylint --rcfile=pylintrc RCubic/*.py
-  - nosetests tests/*.py
+  - nosetests --with-coverage --cover-package=RCubic --cover-min-percentage=85 tests/*.py
