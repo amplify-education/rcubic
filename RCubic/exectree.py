@@ -423,8 +423,8 @@ class ExecJob(object):
 
     def reset(self):
         """ Prepares jobs to be executed again"""
-        for key in self.events.iterkeys():
-            self.events[key].clear()
+        for event in self.events.values():
+            event.clear()
         self.state = self.STATE_RESET
         logging.debug("job {0} has been reset.".format(self.name))
 
@@ -1039,7 +1039,7 @@ class ExecTree(object):
     def run(self, blocking=True, timeout=None):
         logging.debug("About to spin up jobs for {0}".format(self.name))
         for job in self.jobs:
-            for ek, ev in job.events.items():
+            for ev in job.events.values():
                 ev.rawlink(self._is_done_event)
             job.start()
         self.started = True
