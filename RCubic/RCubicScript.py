@@ -157,7 +157,7 @@ class RCubicScriptParser(object):
             blacklist = []
         self.blacklist = blacklist or []
         self.whitelist = whitelist or []
-        self.regexval = (not regexval) or re.compile(regexval, re.MULTILINE)
+        self.regexval = re.compile(regexval, re.MULTILINE) if regexval else None
         self.resources = resources
         self.unusedresources = []
         self.tree = None
