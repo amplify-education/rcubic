@@ -194,10 +194,7 @@ class ExecJob(object):
             args["jobpath"] = str(self.jobpath)
         elif self.subtree is not None:
             args["subtreeuuid"] = str(self.subtree.uuid.hex)
-        if self.logfile is None:
-            args["logfile"] = ""
-        else:
-            args["logfile"] = self.logfile
+        args["logfile"] = self.logfile or ""
         eti = et.Element("execJob", args)
 
         if self.arguments is not None:
@@ -940,8 +937,7 @@ class ExecTree(object):
                     yield sjob
 
     def json_status(self, status=None):
-        if status is None:
-            status = {}
+        status = status or {}
         for job in self._rjobs():
             status[job.name] = {
                 "status": job.STATE_COLORS[job.state],
@@ -1031,8 +1027,7 @@ class ExecTree(object):
 
     def validate_nocycles(self, job, visited, parents=None):
         """ Ensure we do not have cyclical dependencies in the tree """
-        if parents is None:
-            parents = []
+        parents = parents or []
         # logging.debug("validate job: {0} (parents:{1} children:{2})".format(job.name, [v.name for v in parents], [c.name for c in job.children()]))
         if job in parents:
             return False
