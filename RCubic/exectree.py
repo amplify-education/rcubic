@@ -511,7 +511,7 @@ class ExecJob(object):
             return True
         if self.is_success():
             return False
-        g = Greenlet.spawn(self._run)
+        Greenlet.spawn(self._run)
         return True
 
     def _run(self):
