@@ -235,11 +235,10 @@ class ExecJob(object):
     def state(self, value):
         if value not in self.STATES:
             raise UnknownStateError("Job state cannot be changed to {0}.".format(value))
-        if self._state == value:
-            return
-        self._state = value
-        self.statechange.set()
-        self.events[self._state].set()
+        if self._state != value:
+            self._state = value
+            self.statechange.set()
+            self.events[self._state].set()
 
     @property
     def tree(self):
@@ -641,13 +640,9 @@ class ExecResource(object):
         return True
 
     def release(self):
-        if self.avail < 0:
-            return
-        if self.used <= 0:
-            self.used = 0
-        else:
-            self.used -= 1
-        self.event.set()
+        if self.avail >= 0:
+            self.used = max(0, self.used - 1)
+            self.event.set()
 
 
 class ExecDependency(object):
@@ -1061,10 +1056,9 @@ class ExecTree(object):
         return True
 
     def cancel(self):
-        if self.cancelled:
-            return
-        for job in self.jobs:
-            job.cancel()
+        if not self.cancelled:
+            for job in self.jobs:
+                job.cancel()
 
     def run(self, blocking=True, timeout=None):
         logging.debug("About to spin up jobs for {0}".format(self.name))
