@@ -257,7 +257,7 @@ class ExecJob(object):
 
     @progress.setter
     def progress(self, value):
-        if value >= 0 and value <= 100:
+        if 0 <= value <= 100:
             self._progress = value
 
     def _dot_node(self, font):
