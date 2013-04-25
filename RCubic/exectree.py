@@ -124,11 +124,20 @@ class ExecJob(object):
                 try:
                     arguments.append(arg.attrib["value"])
                 except KeyError:
+                    # Undefined variable legenditem
+                    # Alternative is my best guess
+                    #logging.error(
+                    #    "Argument of is missing required xml attribute ({0}:{1})."
+                    #    .format(
+                    #        legenditem.base,
+                    #        legenditem.sourceline
+                    #    )
+                    #)
                     logging.error(
                         "Argument of is missing required xml attribute ({0}:{1})."
                         .format(
-                            legenditem.base,
-                            legenditem.sourceline
+                            "execArg",
+                            "value"
                         )
                     )
                     raise
