@@ -169,6 +169,8 @@ class ExecJob(object):
         self.state = self.STATE_IDLE
         self.subtree = subtree
         self.jobpath = jobpath
+        # pylint reports _jobpath created outside __init__ without this statement
+        self._jobpath = None
         self.execiter = execiter
         self.mustcomplete = mustcomplete
         self.logfile = logfile
@@ -701,6 +703,8 @@ class ExecTree(object):
         self.subtrees = []
         self.done_event = gevent.event.Event()
         self._done = False
+        # pylint reports self.done created outside __init__ without this line
+        self.done = False
         self.resources = []
         self.cancelled = False
         self.started = False
@@ -779,6 +783,18 @@ class ExecTree(object):
 
     def __getitem__(self, key, default=None):
         return dict_by_attr(self.jobs, 'name').get(key, default)
+
+    def __setitem__(self, key, value):
+        # pylint complains this is not implemented. Obviously, it is not called, either
+        assert False
+
+    def __delitem__(self, key):
+        # pylint complains this is not implemented. Obviously, it is not called, either
+        assert False
+
+    def __len__(self):
+        # pylint complains this is not implemented. Obviously, it is not called, either
+        assert False
 
     def find_resource(self, needle, default=None):
         for resource in self.resources:
