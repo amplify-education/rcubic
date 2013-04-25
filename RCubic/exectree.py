@@ -309,26 +309,13 @@ class ExecJob(object):
 
     def has_defined_anscestors(self):
         # caching results will peformance
-        for parent in self.parents():
-            if parent.is_defined():
-                return True
-            elif parent.has_defined_anscestors():
-                return True
-        return False
+        return any(parent.is_defined() or parent.has_defined_anscestors() for parent in self.parents())
 
     def parent_deps(self):
-        deps = []
-        for dep in self.tree.deps:
-            if self == dep.child:
-                deps.append(dep)
-        return deps
+        return [dep for dep in self.tree.deps if self == dep.child]
 
     def child_deps(self):
-        deps = []
-        for dep in self.tree.deps:
-            if self == dep.parent:
-                deps.append(dep)
-        return deps
+        return [dep for dep in self.tree.deps if self == dep.parent]
 
     def children(self):
         return [dep.child for dep in self.child_deps()]
@@ -963,22 +950,17 @@ class ExecTree(object):
 
         WARNING This will not find stem of subtrees with cycles
         """
-        stems = []
-        for job in self.jobs:
-            if job.has_defined_anscestors() or not job.is_defined():
-                continue
-            stems.append(job)
-        return stems
+        return [
+            job
+            for job in self.jobs
+            if not job.has_defined_anscestors() and job.is_defined()
+        ]
 
     def leaves(self):
         """
         Finds and returns all the leaf jobs of a tree
         """
-        leaves = []
-        for job in self.jobs:
-            if len(job.child_deps()) > 0:
-                leaves.append(job)
-        return leaves
+        return [job for job in self.jobs if job.child_deps()]
 
     def validate(self):
         errors = []
@@ -1003,10 +985,7 @@ class ExecTree(object):
                 errors.append("Tree {0} has cycles.".format(self.name))
 
             # What jobs are not connected to stem?
-            unconnected = []
-            for job in self.jobs:
-                if job.is_defined() and job not in visited:
-                    unconnected.append(job)
+            unconnected = [job for job in self.jobs if job.is_defined() and job not in visited]
             if len(unconnected) > 0:
                 errors.append(
                     "The jobs {0} are not connected to {1}."
@@ -1050,10 +1029,7 @@ class ExecTree(object):
         return True
 
     def is_success(self):
-        for job in self.jobs:
-            if not job.is_success():
-                return False
-        return True
+        return all(job.is_success() for job in self.jobs)
 
     def cancel(self):
         if not self.cancelled:
