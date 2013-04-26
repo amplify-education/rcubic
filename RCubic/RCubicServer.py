@@ -41,7 +41,7 @@ class RCubicServer(RESTServer):
 
         """
         super(RCubicServer, self).__init__(*args, **kwargs)
-        self.recievedCheckIns = { }
+        self.recievedCheckIns = {}
         self.registerFunction('checkInUser', self.checkInUser)
 
     def checkInUser(self, env, start_reponse, post):
@@ -72,7 +72,7 @@ class RCubicServer(RESTServer):
 
         """
         if not checkInName in self.recievedCheckIns:
-            self.recievedCheckIns[checkInName] = { }
+            self.recievedCheckIns[checkInName] = {}
         self.recievedCheckIns[checkInName][user] = ev
 
     def unRegisterCheckIn(self, checkInName):
