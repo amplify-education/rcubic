@@ -29,36 +29,36 @@ defgroup="foo"
 defemail="foo@example.com"
 
 class TestRN(unittest.TestCase):
-	def setUp(self):
-		self.notify = RCubicNotification()
+    def setUp(self):
+        self.notify = RCubicNotification()
 
-	def test_add_email(self, group=defgroup, email=defemail):
-		"""Add an email by group name"""
-		self.notify.add_email(group, email)
-		self.assertEquals(self.notify.email[group], email)
+    def test_add_email(self, group=defgroup, email=defemail):
+        """Add an email by group name"""
+        self.notify.add_email(group, email)
+        self.assertEquals(self.notify.email[group], email)
 
-	def test_disable(self):
-		"""Test disabling of notification"""
-		self.notify.disable()
-		self.assertFalse(self.notify.enabled)
+    def test_disable(self):
+        """Test disabling of notification"""
+        self.notify.disable()
+        self.assertFalse(self.notify.enabled)
 
-	def test_send(self, group=defgroup):
-		"""Test sending email
-		We cannot do a full test as we cannot rely on mailserver being
-		there. Maybe make a fake smtp lib?"""
-		self.test_add_email()
-		rval = self.notify.send([group], "test", "message")
-		#must assume failure as local mail sever probably does not exist
-		self.assertFalse(rval)
+    def test_send(self, group=defgroup):
+        """Test sending email
+        We cannot do a full test as we cannot rely on mailserver being
+        there. Maybe make a fake smtp lib?"""
+        self.test_add_email()
+        rval = self.notify.send([group], "test", "message")
+        #must assume failure as local mail sever probably does not exist
+        self.assertFalse(rval)
 
-	def test_send_disabled(self, group=defgroup):
-		"""Test not sending email, disabled mode"""
-		self.test_disable()
-		self.test_send(group=defgroup)
+    def test_send_disabled(self, group=defgroup):
+        """Test not sending email, disabled mode"""
+        self.test_disable()
+        self.test_send(group=defgroup)
 
-	def test_send_badgroup(self):
-		self.test_send("bar")
+    def test_send_badgroup(self):
+        self.test_send("bar")
 
-	def test_has_groups(self):
-		"""Test group look up functionality"""
-		self.assertTrue(self.notify.has_groups([defgroup]))
+    def test_has_groups(self):
+        """Test group look up functionality"""
+        self.assertTrue(self.notify.has_groups([defgroup]))
