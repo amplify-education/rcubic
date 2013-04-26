@@ -547,7 +547,7 @@ class TestET(unittest.TestCase):
             logging.debug("{0} start time: {1}. {2} start time: {3}"
                 .format(job, jst, job5, j5st)
             )
-            self.assertTrue(jst < j5st )
+            self.assertTrue(jst < j5st)
 
 
 if  __name__ == '__main__':
