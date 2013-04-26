@@ -79,8 +79,8 @@ class IterratorOverrunError(RuntimeError):
 
 # class ExecJob(Greenlet):
 class ExecJob(object):
-    STATES = ( 0, 1, 2, 3, 4, 5, 6, 7 )
-    (   STATE_IDLE, STATE_RUNNING, STATE_SUCCESSFULL, STATE_FAILED,
+    STATES = (0, 1, 2, 3, 4, 5, 6, 7 )
+    (STATE_IDLE, STATE_RUNNING, STATE_SUCCESSFULL, STATE_FAILED,
         STATE_CANCELLED, STATE_UNDEF, STATE_RESET, STATE_BLOCKED
     ) = STATES
     DEPENDENCY_STATES = [STATE_SUCCESSFULL, STATE_FAILED]
@@ -1201,7 +1201,7 @@ class ExecTree(object):
         """ True if all jobs in tree have completed execution """
         for job in self.jobs:
             if job.mustcomplete:
-                if ( not self.cancelled
+                if (not self.cancelled
                      and self.waitsuccess
                      and not job.is_success()
                    ):
