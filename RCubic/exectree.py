@@ -79,7 +79,7 @@ class IterratorOverrunError(RuntimeError):
 
 # class ExecJob(Greenlet):
 class ExecJob(object):
-    STATES = (0, 1, 2, 3, 4, 5, 6, 7 )
+    STATES = (0, 1, 2, 3, 4, 5, 6, 7)
     (STATE_IDLE, STATE_RUNNING, STATE_SUCCESSFULL, STATE_FAILED,
         STATE_CANCELLED, STATE_UNDEF, STATE_RESET, STATE_BLOCKED
     ) = STATES
