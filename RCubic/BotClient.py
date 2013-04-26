@@ -26,6 +26,7 @@ import gevent
 from gevent import event
 
 class BotClient(RESTClient):
+
     """Extends the RESTClient class to provide an interface to a BotServer
 
     """
