@@ -44,8 +44,8 @@ setup(name = 'RCubic',
           ],
       # Config files
       data_files = [
-          ('RCubic/', ["RCubic/rcubic.xml.template" ]),
-          ('RCubic/web/', ["RCubic/web/index.html" ]),
+          ('RCubic/', ["RCubic/rcubic.xml.template"]),
+          ('RCubic/web/', ["RCubic/web/index.html"]),
           ('RCubic/web/archive/', ["RCubic/web/archive/index.html"]),
           ('RCubic/web/', [
               "RCubic/web/index.html",
@@ -69,7 +69,7 @@ setup(name = 'RCubic',
             "RCubic/web/js/syntax/shCore.js",
             "RCubic/web/js/syntax/shBrushBash.js"]),
           ('RCubic/web/css/vader/', [
-            "RCubic/web/css/vader/jquery-ui-1.8.21.custom.css" ]),
+            "RCubic/web/css/vader/jquery-ui-1.8.21.custom.css"]),
           ('RCubic/web/css/vader/images/', [
             "RCubic/web/css/vader/images/ui-bg_glass_95_fef1ec_1x400.png",
             "RCubic/web/css/vader/images/ui-icons_aaaaaa_256x240.png",
