@@ -92,4 +92,4 @@ class RCubicNotification(object):
 
     def has_groups(self, groups):
         """Return all groups which don't have matching email"""
-        return [group for group in groups if group.lower() not in self.email ]
+        return [group for group in groups if group.lower() not in self.email]
