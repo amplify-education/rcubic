@@ -66,7 +66,7 @@ class RCubicClient(RESTClient):
         """
 
         """
-        return self.getResponse("reclone", data = {"token": self.token }, *args, **kwargs)
+        return self.getResponse("reclone", data = {"token": self.token}, *args, **kwargs)
 
     def reschedule(self, scriptName=None, *args, **kwargs):
         """
@@ -90,4 +90,4 @@ class RCubicClient(RESTClient):
         """
         Asks server to gracefully exit.
         """
-        return self.getResponse("cancel", data = {"token": self.token }, *args, **kwargs)
+        return self.getResponse("cancel", data = {"token": self.token}, *args, **kwargs)
