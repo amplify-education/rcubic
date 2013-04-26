@@ -40,7 +40,6 @@ class RCubicClient(RESTClient):
         """
         super(RCubicClient, self).__init__(server, port, *args, **kwargs)
 
-
     def checkInUser(self, user, checkInName, address=None, port=None, *args, **kwargs):
         """Sends a 'checkInUser' request to the RCubicServer.
 
