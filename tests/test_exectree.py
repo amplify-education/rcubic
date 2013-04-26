@@ -2,25 +2,25 @@
 # vim: ts=4 et sts filetype=python
 # This file is part of RCubic
 #
-#Copyright (c) 2012 Wireless Generation, Inc.
+# Copyright (c) 2012 Wireless Generation, Inc.
 #
-#Permission is hereby granted, free of charge, to any person obtaining a copy
-#of this software and associated documentation files (the "Software"), to deal
-#in the Software without restriction, including without limitation the rights
-#to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-#copies of the Software, and to permit persons to whom the Software is
-#furnished to do so, subject to the following conditions:
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
 #
-#The above copyright notice and this permission notice shall be included in
-#all copies or substantial portions of the Software.
+# The above copyright notice and this permission notice shall be included in
+# all copies or substantial portions of the Software.
 #
-#THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-#IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-#FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-#AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-#LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-#OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-#THE SOFTWARE.
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+# THE SOFTWARE.
 
 from RCubic import exectree
 import unittest
@@ -40,8 +40,8 @@ import functools
 class TestET(unittest.TestCase):
 
     def setUp(self):
-        #logger = logging.getLogger('')
-        #logger.setLevel(logging.DEBUG)
+        # logger = logging.getLogger('')
+        # logger.setLevel(logging.DEBUG)
 
         self.workdir = tempfile.mkdtemp(prefix="rct")
         self.my_arg_str_print = "echo \"MYARGS_WERE: {0}\"\n"
@@ -108,10 +108,10 @@ class TestET(unittest.TestCase):
         if tree == None:
             tree = self.tree
         graph = tree.dot_graph()
-        #self.assertIs(graph, Graph)
+        # self.assertIs(graph, Graph)
         self.assertTrue(isinstance(graph, pydot.Graph))
 
-        #TODO validate the file somehow
+        # TODO validate the file somehow
         if target == None:
             target = "{0}/et.png".format(self.workdir)
         graph.write_png(target)
@@ -124,18 +124,18 @@ class TestET(unittest.TestCase):
         job4 = self._newjob("fiz", self.tree)
         job5 = self._newjob("buz", self.tree)
         job6 = self._newjob("fez", self.tree)
-        #print("jobs: {0}".format([job.name for job in self.tree.jobs]))
+        # print("jobs: {0}".format([job.name for job in self.tree.jobs]))
         self.tree.add_dep(job4, job5)
 
-        #graph = self.tree.dot_graph()
-        #graph.write_png("/tmp/et1.png")
+        # graph = self.tree.dot_graph()
+        # graph.write_png("/tmp/et1.png")
 
         stems = self.tree.stems()
-        #print("stems: {0}".format([stem.name for stem in stems]))
+        # print("stems: {0}".format([stem.name for stem in stems]))
 
         self.assertEqual(len(stems), 3)
-        #self.assertIn(job4, stems)
-        #self.assertNotIn(job5, stems)
+        # self.assertIn(job4, stems)
+        # self.assertNotIn(job5, stems)
         self.assertTrue(job4 in stems)
         self.assertFalse(job5 in stems)
         self.assertTrue(job6 in stems)
@@ -151,10 +151,10 @@ class TestET(unittest.TestCase):
         """Cycle detection"""
         self.tree.add_dep(self.job2, self.job3)
         self.tree.add_dep(self.job3, self.job2)
-        #graph = self.tree.dot_graph()
-        #graph.write_png("/tmp/et1.png")
-        #stems = self.tree.stems()
-        #logging.debug("stems: {0}".format([stem.name for stem in stems]))
+        # graph = self.tree.dot_graph()
+        # graph.write_png("/tmp/et1.png")
+        # stems = self.tree.stems()
+        # logging.debug("stems: {0}".format([stem.name for stem in stems]))
         self.assertNotEqual(self.tree.validate(), [])
 
     def test_validation(self, tree=None):
@@ -234,11 +234,11 @@ class TestET(unittest.TestCase):
         self.tree.add_job(job4)
         self.tree.add_dep(self.job3, job4)
 
-        #Ensure xml export import works
+        # Ensure xml export import works
         self.test_xml()
 
-        #Lets break subtree in several differnt ways to ensure it fails
-        #validation
+        # Lets break subtree in several differnt ways to ensure it fails
+        # validation
         job4.subtree = None
         self.assertNotEqual(self.tree.validate(), [])
 
@@ -249,7 +249,7 @@ class TestET(unittest.TestCase):
         self.assertNotEqual(self.tree.validate(), [])
         job4.jobpath = None
 
-        #And that the tree is valid
+        # And that the tree is valid
         self.test_validation()
 
         with gevent.Timeout(10):
@@ -314,7 +314,7 @@ class TestET(unittest.TestCase):
         self.arguments = ["qwe", "asd", "zxc"]
         self.ltree.iterator = exectree.ExecIter("test", self.arguments)
 
-        #Each time self.ljob1 executes increment counter
+        # Each time self.ljob1 executes increment counter
         self.ljob1_count = 0
         self.ljob1.events[exectree.ExecJob.STATE_SUCCESSFULL].rawlink(
             self._test_treetarator_count_incr
@@ -331,7 +331,7 @@ class TestET(unittest.TestCase):
             runreturn = self.tree.run()
 
         self.assertTrue(self.ljob1_count == len(self.arguments))
-        #Confirm that we see all 3 arguments
+        # Confirm that we see all 3 arguments
         text = self._logfile_read(self.ljob1)
         logging.debug("arguments: {0}".format(text))
         last = 0
@@ -421,7 +421,7 @@ class TestET(unittest.TestCase):
         self.assertTrue(self.tree.is_success())
         logging.debug("times {0}".format(times))
 
-        #No jobs overlapped?
+        # No jobs overlapped?
         for job in jobs:
             for sjob in jobs:
                 if job == sjob:
