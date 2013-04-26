@@ -360,4 +360,3 @@ class RCubicScriptParser(object):
 					d.color = {"defined":"gold2", "undefined":"gold2"}
 		#logging.debug("tree:\n{0}".format(etree.tostring(self.tree.xml(), pretty_print=True)))
 		return self.tree
-
