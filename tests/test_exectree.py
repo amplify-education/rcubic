@@ -84,7 +84,7 @@ class TestET(unittest.TestCase):
             os.write(fd, self.my_arg_str_print.format("$2"))
             os.write(fd, "echo \"hello my name is {0}\"\n".format(name))
             if maxsleep > 0:
-                os.write( fd, "sleep \"{0}\"\n"
+                os.write(fd, "sleep \"{0}\"\n"
                     .format(random.randrange(0, maxsleep))
                 )
             os.write(fd, append)
@@ -547,7 +547,7 @@ class TestET(unittest.TestCase):
             logging.debug("{0} start time: {1}. {2} start time: {3}"
                 .format(job, jst, job5, j5st)
             )
-            self.assertTrue( jst < j5st )
+            self.assertTrue(jst < j5st )
 
 
 if  __name__ == '__main__':
