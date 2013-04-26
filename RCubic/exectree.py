@@ -725,6 +725,7 @@ class ExecResource(object):
 
 
 class ExecDependency(object):
+
     def __init__(self, parent, child, state=ExecJob.STATE_SUCCESSFULL):
         self.parent = parent
         self.child = child
@@ -794,6 +795,7 @@ class ExecDependency(object):
 
 
 class ExecTree(object):
+
     def __init__(self, xml=None):
         self.jobs = []
         self.deps = []
