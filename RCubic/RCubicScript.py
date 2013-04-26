@@ -68,12 +68,12 @@ class RCubicScript(object):
         self.phase = phase
 
         if len(blacklist) > 0 and self.name in blacklist:
-            self.path="-"
+            self.path = "-"
         elif len(whitelist) > 0 and self.name not in whitelist:
-            self.path="-"
+            self.path = "-"
 
     def _get_param(self, script, field, default=None):
-        fieldre = re.compile("^#%s:.*$" %(field), re.MULTILINE)
+        fieldre = re.compile("^#%s:.*$" % (field), re.MULTILINE)
         begin = re.compile("^#[A-Z0-9]+:[\s]*")
         line = fieldre.search(script)
         if line:
@@ -111,7 +111,7 @@ class RCubicGroup(object):
         except KeyError:
             raise ConfigurationError(
                     "Element on line %i of %s is missing version or group attributes."
-                    %(element.sourceline, element.base)
+                    % (element.sourceline, element.base)
             )
 
         try:
@@ -121,7 +121,7 @@ class RCubicGroup(object):
         except:
             raise ConfigurationError(
                     "Attribute phase on line %i of %s has unrecognized value: '%s'."
-                    %(element.sourceline, element.base, self.phase)
+                    % (element.sourceline, element.base, self.phase)
             )
 
         def booler(element, attrib, default):
@@ -176,7 +176,7 @@ class RCubicScriptParser(object):
         elif blacklist is None:
             blacklist = []
         elif whitelist is None:
-            whitelist =[]
+            whitelist = []
         self.blacklist = blacklist
         self.whitelist = whitelist
         if regexval is not None:
@@ -262,7 +262,7 @@ class RCubicScriptParser(object):
         logging.debug("set hrefs")
         for script in self.scripts():
             script.href = "{0}/gitweb?p={1};a=blob;f={2};hb={3}".format(
-                    gerrit, project, script.path[len(repopath) +1:], githash
+                    gerrit, project, script.path[len(repopath) + 1:], githash
             )
 
     def init_tree(self):
