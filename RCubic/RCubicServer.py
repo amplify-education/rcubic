@@ -25,6 +25,7 @@
 from MiniREST.RESTServer import RESTServer, responseCodes, responseTypes
 
 class RCubicServer(RESTServer):
+
     """RCubicServer - creates a new RCubicServer instance.
     Extends RESTServer with custom functions.
 
