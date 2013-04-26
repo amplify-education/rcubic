@@ -942,7 +942,6 @@ class ExecTree(object):
                 return job
         return default
 
-
     def add_job(self, job):
         """ Add a job to tree"""
         if self.find_job(job.name):
