@@ -164,7 +164,7 @@ class RCubicGroup(object):
 
 
 class RCubicScriptParser(object):
-    PHASES = {"DEFAULT":0, "EARLY":-1, "LATE":1}
+    PHASES = {"DEFAULT": 0, "EARLY": -1, "LATE": 1}
 
     def __init__(self, groups, logdir, workdir, whitelist, blacklist, regexval, resources):
         self.groups = groups
@@ -336,7 +336,7 @@ class RCubicScriptParser(object):
                     dep = exectree.ExecJob(dep, "-", mustcomplete=False)
                     tree.add_job(dep)
                     d = tree.add_dep(dep, script.job)
-                d.color = {"defined":"deepskyblue", "undefined":"red"}
+                d.color = {"defined": "deepskyblue", "undefined": "red"}
             for dep in self._glob_expand(script.sdep):
                 try:
                     d = tree.add_dep(dep, script.job)
@@ -344,7 +344,7 @@ class RCubicScriptParser(object):
                     dep = exectree.ExecJob(dep, "-", mustcomplete=False)
                     tree.add_job(dep)
                     d = tree.add_dep(dep, script.job)
-                d.color = {"defined":"lawngreen", "undefined":"palegreen"}
+                d.color = {"defined": "lawngreen", "undefined": "palegreen"}
             for cdep in self._glob_expand(script.cdep):
                 # logging.debug("adding dep to ")
                 try:
@@ -353,7 +353,7 @@ class RCubicScriptParser(object):
                     cdep = exectree.ExecJob(cdep, "-", mustcomplete=False)
                     tree.add_job(cdep)
                     d = tree.add_dep(script.job, cdep)
-                d.color = {"defined":"lawngreen", "undefined":"palegreen"}
+                d.color = {"defined": "lawngreen", "undefined": "palegreen"}
             # stems = self.tree.stems()
             for pdep in self.scripts():
                 # if pdep.phase < script.phase and pdep.job in stems:
@@ -361,6 +361,6 @@ class RCubicScriptParser(object):
                     d = tree.add_dep(pdep.job, script.job)
                     if d is None:
                         continue
-                    d.color = {"defined":"gold2", "undefined":"gold2"}
+                    d.color = {"defined": "gold2", "undefined": "gold2"}
         # logging.debug("tree:\n{0}".format(etree.tostring(self.tree.xml(), pretty_print=True)))
         return self.tree
