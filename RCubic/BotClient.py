@@ -89,9 +89,9 @@ class BotClient(RESTClient):
                 ev = event.Event()
                 events.append(ev)
                 if room:
-                    user = room+'/'+user
+                    user = room +'/' +user
                 else:
-                    user = user+'@'+server
+                    user = user +'@' +server
                 self.restserver.registerCheckIn(user, checkInName, ev)
                 if not room:
                     self.getResponse("requestUserCheckIn", data = {"users": [user], "checkInName": checkInName, "message": message, "room":room, "callbackPort":port, "token":self.token}, *args, **kwargs )
