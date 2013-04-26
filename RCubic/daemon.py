@@ -4,7 +4,10 @@
 
 # Edited by ilya@sukhanov.net
 
-import sys, os, time, atexit
+import sys
+import os
+import time
+import atexit
 from signal import SIGTERM
 
 
