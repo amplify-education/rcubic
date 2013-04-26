@@ -101,6 +101,7 @@ class RCubicScript(object):
                 break
         return retVal
 
+
 class RCubicGroup(object):
 
     def __init__(self, element):
