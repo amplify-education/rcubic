@@ -28,6 +28,7 @@ from RCubic.RCubicNotification import RCubicNotification
 defgroup="foo"
 defemail="foo@example.com"
 
+
 class TestRN(unittest.TestCase):
 
     def setUp(self):
