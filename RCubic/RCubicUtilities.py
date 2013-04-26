@@ -51,7 +51,6 @@ def popenNonblock(args, data='', stdin=subprocess.PIPE, stdout=subprocess.PIPE, 
     real_stdout = p.stdout if stdout == subprocess.PIPE else stdout
     fcntl.fcntl(real_stdout, fcntl.F_SETFL, os.O_NONBLOCK)	# make the file nonblocking
 
-
     if data:
         bytes_total = len(data)
         bytes_written = 0
@@ -161,15 +160,12 @@ class LogToDB(object):
     #		result = self.conn.execute(query, (Status.STARTED,))
     #	return list(result)
 
-
     #def closeUnfinished(self, group, job):
     #	#probably a good idea to log when ever this is run because it mucks with audit log
     #	unfinishedEntries = self.getUnfinished(group)
-
     #	for entry in unfinishedEntries:
     #		if entry[3] == job:
     #			self.saveStatus(entry[1], entry[2], Status.FAILED, entry[3])
-
     #def getStatus(self, group, version, job=None):
     #	"""Returns single most relavant 'Status' update matching criteria from arguments."""
     #	query = "SELECT status FROM latest_events WHERE groupe = ? AND version = ? "
@@ -183,7 +179,6 @@ class LogToDB(object):
     #		if imp in stati:
     #			return imp
     #	return "NONE"
-
     @classmethod
     def verComp(cls, a, b):
         #-1 b greater
