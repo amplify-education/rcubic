@@ -1,24 +1,24 @@
 # This file is part of RCubic
 #
-#Copyright (c) 2012 Wireless Generation, Inc.
+# Copyright (c) 2012 Wireless Generation, Inc.
 #
-#Permission is hereby granted, free of charge, to any person obtaining a copy
-#of this software and associated documentation files (the "Software"), to deal
-#in the Software without restriction, including without limitation the rights
-#to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-#copies of the Software, and to permit persons to whom the Software is
-#furnished to do so, subject to the following conditions:
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
 #
-#The above copyright notice and this permission notice shall be included in
-#all copies or substantial portions of the Software.
+# The above copyright notice and this permission notice shall be included in
+# all copies or substantial portions of the Software.
 #
-#THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-#IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-#FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-#AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-#LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-#OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-#THE SOFTWARE.
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+# THE SOFTWARE.
 
 
 import os, sys, time, subprocess, re, errno, fcntl
@@ -49,7 +49,7 @@ def popenNonblock(args, data='', stdin=subprocess.PIPE, stdout=subprocess.PIPE, 
     real_stdin = p.stdin if stdin == subprocess.PIPE else stdin
     fcntl.fcntl(real_stdin, fcntl.F_SETFL, os.O_NONBLOCK)  # make the file nonblocking
     real_stdout = p.stdout if stdout == subprocess.PIPE else stdout
-    fcntl.fcntl(real_stdout, fcntl.F_SETFL, os.O_NONBLOCK)	# make the file nonblocking
+    fcntl.fcntl(real_stdout, fcntl.F_SETFL, os.O_NONBLOCK)  # make the file nonblocking
 
     if data:
         bytes_total = len(data)
@@ -100,14 +100,14 @@ class LogToDB(object):
         self.dbPath = dbPath
         newdb = (not os.path.exists(self.dbPath))
         self.conn = sqlite3.connect(self.dbPath)
-        self.conn.isolation_level = None	# set to autocommit
+        self.conn.isolation_level = None  # set to autocommit
         if newdb:
             self._initDB(self.conn)
         else:
             self._checkDBVersion(self.conn)
 
     def _initDB(self, conn):
-        #TODO does githead have to be in primary key?
+        # TODO does githead have to be in primary key?
         query = "CREATE TABLE events (time integer, groupe text, version text, githead text, job text, status text, " \
                                 " PRIMARY KEY (time, groupe, job, status))"
         self.conn.execute(query)
@@ -152,7 +152,7 @@ class LogToDB(object):
         else:
             return True
 
-    #def getUnfinished(self, group=None):
+    # def getUnfinished(self, group=None):
     #	query = "SELECT * FROM latest_events WHERE status = ? "
     #	if group:
     #		result = self.conn.execute(query + " AND groupe = ? ", (Status.STARTED, group))
@@ -160,13 +160,13 @@ class LogToDB(object):
     #		result = self.conn.execute(query, (Status.STARTED,))
     #	return list(result)
 
-    #def closeUnfinished(self, group, job):
-    #	#probably a good idea to log when ever this is run because it mucks with audit log
+    # def closeUnfinished(self, group, job):
+    # probably a good idea to log when ever this is run because it mucks with audit log
     #	unfinishedEntries = self.getUnfinished(group)
     #	for entry in unfinishedEntries:
     #		if entry[3] == job:
     #			self.saveStatus(entry[1], entry[2], Status.FAILED, entry[3])
-    #def getStatus(self, group, version, job=None):
+    # def getStatus(self, group, version, job=None):
     #	"""Returns single most relavant 'Status' update matching criteria from arguments."""
     #	query = "SELECT status FROM latest_events WHERE groupe = ? AND version = ? "
     #	if job:
@@ -182,8 +182,8 @@ class LogToDB(object):
     @classmethod
     def verComp(cls, a, b):
         #-1 b greater
-        #0 same
-        #1 a greater
+        # 0 same
+        # 1 a greater
         alphas = re.compile("[a-zA-Z]")
         rev = re.compile("[-_~]")
         dots = re.compile("[.,]")
