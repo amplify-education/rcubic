@@ -1,36 +1,36 @@
 # vim: ts=4 et filetype=python
 # This file is part of RCubic
 #
-#Copyright (c) 2012 Wireless Generation, Inc.
+# Copyright (c) 2012 Wireless Generation, Inc.
 #
-#Permission is hereby granted, free of charge, to any person obtaining a copy
-#of this software and associated documentation files (the "Software"), to deal
-#in the Software without restriction, including without limitation the rights
-#to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-#copies of the Software, and to permit persons to whom the Software is
-#furnished to do so, subject to the following conditions:
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
 #
-#The above copyright notice and this permission notice shall be included in
-#all copies or substantial portions of the Software.
+# The above copyright notice and this permission notice shall be included in
+# all copies or substantial portions of the Software.
 #
-#THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-#IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-#FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-#AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-#LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-#OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-#THE SOFTWARE.
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+# THE SOFTWARE.
 
 import uuid
 import pydot
-#import xml.etree.ElementTree as et
+# import xml.etree.ElementTree as et
 from lxml import etree as et
 import gevent
 from gevent import (Greenlet, event, socket)
 import os
 import random
-#from itertools import ifilter
-#from operator import methodcaller
+# from itertools import ifilter
+# from operator import methodcaller
 import subprocess
 import fcntl
 import errno
@@ -77,7 +77,7 @@ class IterratorOverrunError(RuntimeError):
     pass
 
 
-#class ExecJob(Greenlet):
+# class ExecJob(Greenlet):
 class ExecJob(object):
     STATES = ( 0, 1, 2, 3, 4, 5, 6, 7 )
     (   STATE_IDLE, STATE_RUNNING, STATE_SUCCESSFULL, STATE_FAILED,
@@ -112,7 +112,7 @@ class ExecJob(object):
             resources = []
         if xml is not None:
             if tree is None:
-                #TODO make tree param required
+                # TODO make tree param required
                 raise TreeUndefinedError("Tree is not known")
             if xml.tag != "execJob":
                 raise XMLError("Expect to find execJob in xml.")
@@ -221,7 +221,7 @@ class ExecJob(object):
     def __str__(self):
         return "<ExecJob {0}>".format(self.name)
 
-    #TODO: setter for sub tree to ensure only subtrees are iterable
+    # TODO: setter for sub tree to ensure only subtrees are iterable
 
     @property
     def jobpath(self):
@@ -325,7 +325,7 @@ class ExecJob(object):
         Return true if job has referenced by some dependency
         Used to check if job is connected to tree
         """
-        #caching results will peformance
+        # caching results will peformance
         for parent in self.parents():
             if parent.is_defined():
                 return True
@@ -361,7 +361,7 @@ class ExecJob(object):
             )
         elif self.jobpath is not None:
             if self.jobpath == self.UNDEF_JOB:
-                #We allow existance of no-op jobs
+                # We allow existance of no-op jobs
                 pass
             elif not os.path.exists(self.jobpath):
                 errors.append(
@@ -569,7 +569,7 @@ class ExecJob(object):
         try:
             logging.debug("{0} is starting".format(self.name))
             self.state = self.STATE_RUNNING
-            #rcubic.refreshStatus(self)
+            # rcubic.refreshStatus(self)
             if self.jobpath is not None:
                 args = [self.jobpath]
                 if self.arguments is not None:
@@ -758,8 +758,8 @@ class ExecDependency(object):
         """ Generate dot edge object repersenting dependency """
 
         if self.parent.subtree is not None and self.child.subtree is not None:
-            #This is a bit tricky we need to loop 2x but the real problems is
-            #that it will look UGLY
+            # This is a bit tricky we need to loop 2x but the real problems is
+            # that it will look UGLY
             raise NotImplementedError(
                 "Dependency between 2 subtrees is not implemented"
             )
@@ -852,10 +852,10 @@ class ExecTree(object):
     @property
     def cluster_name(self):
         """ Return cluster name """
-        #pydot does not properly handle space in subtree
+        # pydot does not properly handle space in subtree
         name = self.name.replace(" ", "_")
         return "\"cluster_{0}\"".format(name)
-        #return "\"cluster_{0}\"".format(self.name)
+        # return "\"cluster_{0}\"".format(self.name)
 
     def xml(self):
         args = {
@@ -870,7 +870,7 @@ class ExecTree(object):
         for job in self.jobs:
             if job.subtree is not None:
                 eti.append(job.subtree.xml())
-            #else:
+            # else:
             #   print("job {0} does not have a subtree.".format(job.name))
             eti.append(job.xml())
         for dep in self.deps:
@@ -970,7 +970,7 @@ class ExecTree(object):
                 "defined": xml.attrib["dcolor"]
             }
 
-        #Ensure parent and child are ExecJobs
+        # Ensure parent and child are ExecJobs
         if not isinstance(parent, ExecJob):
             parent = self.find_job(parent, parent)
             if not isinstance(parent, ExecJob):
@@ -986,7 +986,7 @@ class ExecTree(object):
                     .format(child, self.name)
                 )
 
-        #Parent and Child must be members of the tree
+        # Parent and Child must be members of the tree
         for k in [child, parent]:
             if k not in self.jobs:
                 raise JobUndefinedError(
@@ -1023,7 +1023,7 @@ class ExecTree(object):
             return gparents[job] + parents
         gparents[job] = []
         for parent in parents:
-            #we don't use extend to dedupe
+            # we don't use extend to dedupe
             for e in self._gparent_compile(parent, gparents):
                 if e not in gparents[job]:
                     gparents[job].append(e)
@@ -1159,7 +1159,7 @@ class ExecTree(object):
             if cycles:
                 errors.append("Tree {0} has cycles.".format(self.name))
 
-            #What jobs are not connected to stem?
+            # What jobs are not connected to stem?
             unconnected = []
             for job in self.jobs:
                 if job.is_defined() and job not in visited:
@@ -1227,8 +1227,8 @@ class ExecTree(object):
         return True
 
     def cancel(self):
-        #TODO break cancel into cancel and abort, cancel should be called externally we do want to kill off jobs without leaving cancel metadata all over the place
-        #TODO if canceling a subtree of a running parent .. we need to fail else we will have to wait 'till execution timeout
+        # TODO break cancel into cancel and abort, cancel should be called externally we do want to kill off jobs without leaving cancel metadata all over the place
+        # TODO if canceling a subtree of a running parent .. we need to fail else we will have to wait 'till execution timeout
         """ Abort tree execution.
         Will prevent new jobs from starting. All running jobs will be left
         as is"""
@@ -1280,7 +1280,7 @@ class ExecTree(object):
                     self.cancel()
                     return
 
-    #TODO make event based: on job status change, progress change..
+    # TODO make event based: on job status change, progress change..
     def _json_updater(self, path):
         while not self._done:
             gevent.sleep(5)
