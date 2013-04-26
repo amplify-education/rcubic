@@ -133,7 +133,7 @@ class ExecJob(object):
                     arguments.append(arg.attrib["value"])
                 except KeyError:
                     logging.error(
-                        "Argument is missing required xml attribute" \
+                        "Argument is missing required xml attribute"
                         "({0}:{1}).".format(
                             arg.base,
                             arg.sourceline
@@ -975,7 +975,7 @@ class ExecTree(object):
             parent = self.find_job(parent, parent)
             if not isinstance(parent, ExecJob):
                 raise JobUndefinedError(
-                    "Job {0} is needed by {2} but is not defined in " \
+                    "Job {0} is needed by {2} but is not defined in "
                     "(tree: {1}).".format(parent, self.name, child)
                 )
         if not isinstance(child, ExecJob):
@@ -1262,7 +1262,7 @@ class ExecTree(object):
                     )
                     gevent.sleep(1)
                     logging.debug(
-                        "Chilling is done. Impatiently waiting for jobs of"\
+                        "Chilling is done. Impatiently waiting for jobs of"
                         "{0} to finish".format(self.name)
                     )
                     self.join()
