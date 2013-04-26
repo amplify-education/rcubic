@@ -37,6 +37,7 @@ import logging
 import functools
 
 class TestET(unittest.TestCase):
+
     def setUp(self):
         #logger = logging.getLogger('')
         #logger.setLevel(logging.DEBUG)
