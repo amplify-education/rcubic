@@ -30,6 +30,7 @@ from MiniREST.RESTServer import RESTServer, responseCodes, responseTypes
 import logging
 
 class RESTCommunicator(RESTServer):
+
     """RESTCommunicator - creates a new RESTCommunicator instance.
     Extends RESTServer with custom functions.
 
