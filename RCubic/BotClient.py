@@ -82,7 +82,7 @@ class BotClient(RESTClient):
             ev = event.Event()
             self.restserver.registerCheckIn(room, checkInName, ev)
             events.append(ev)
-            self.getResponse("requestRoomCheckIn", data = { "checkInName": checkInName, "message": message, "room": room, 'callbackPort': port, "token": self.token}, *args, **kwargs)
+            self.getResponse("requestRoomCheckIn", data = {"checkInName": checkInName, "message": message, "room": room, 'callbackPort': port, "token": self.token}, *args, **kwargs)
         else:
             # Go through all users and parse for pm or room
             for user in users:
