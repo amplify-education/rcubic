@@ -349,7 +349,7 @@ class TestET(unittest.TestCase):
         self.assertTrue(self.tree.is_done())
         logging.debug("{0} == {1}".format(self.ljob1_count, len(self.arguments)))
         self.test_graph(target="{0}/cyt.png".format(self.workdir))
-    
+
     def _cancel_tree(self, tree, event):
         tree.cancel()
 
@@ -371,7 +371,7 @@ class TestET(unittest.TestCase):
         self.assertTrue(self.job5.is_cancelled())
         self.assertTrue(self.job3.is_success())
         self.assertTrue(self.ltree.cancelled)
-    
+
     def test_treetarator_tree_cancel(self):
         """Cancel parent tree mid iterated execution"""
         self._test_treetarator_init()
@@ -556,7 +556,7 @@ class TestET(unittest.TestCase):
                 .format(job, jst, job5, j5st)
             )
             self.assertTrue( jst < j5st )
-        
+
 
 if  __name__ == '__main__':
     unittest.main()
