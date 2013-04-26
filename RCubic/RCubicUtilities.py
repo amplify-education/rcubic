@@ -27,11 +27,14 @@ import gevent
 import logging
 from gevent import (event, server, socket)
 
+
 class VersionCompareError(Exception):
     pass
 
+
 class FatalRuntimeError(RuntimeError):
     pass
+
 
 def popenNonblock(args, data='', stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, cwd=None, logFile=None):
     """Communicate with the process non-blockingly.
@@ -90,6 +93,7 @@ def popenNonblock(args, data='', stdin=subprocess.PIPE, stdout=subprocess.PIPE, 
             gevent.sleep(1)
 
     return (returncode, output)
+
 
 class LogToDB(object):
 
