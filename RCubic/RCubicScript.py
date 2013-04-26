@@ -36,6 +36,7 @@ class ConfigurationError(Exception):
 
 
 class RCubicScript(object):
+
     def __init__(self, filepath, version, override, phase, logdir, whitelist, blacklist, regexval, group):
         self.path = filepath
         self.name = filepath.split("/")[-1]
@@ -101,6 +102,7 @@ class RCubicScript(object):
         return retVal
 
 class RCubicGroup(object):
+
     def __init__(self, element):
         try:
             self.version = element.attrib["version"]
@@ -162,6 +164,7 @@ class RCubicGroup(object):
 
 class RCubicScriptParser(object):
     PHASES = {"DEFAULT":0, "EARLY":-1, "LATE":1}
+
     def __init__(self, groups, logdir, workdir, whitelist, blacklist, regexval, resources):
         self.groups = groups
         self.logdir = logdir
