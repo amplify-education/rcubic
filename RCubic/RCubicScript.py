@@ -1,25 +1,25 @@
 # vim: ts=4 noet filetype=python
 # This file is part of RCubic
 #
-#Copyright (c) 2012 Wireless Generation, Inc.
+# Copyright (c) 2012 Wireless Generation, Inc.
 #
-#Permission is hereby granted, free of charge, to any person obtaining a copy
-#of this software and associated documentation files (the "Software"), to deal
-#in the Software without restriction, including without limitation the rights
-#to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-#copies of the Software, and to permit persons to whom the Software is
-#furnished to do so, subject to the following conditions:
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
 #
-#The above copyright notice and this permission notice shall be included in
-#all copies or substantial portions of the Software.
+# The above copyright notice and this permission notice shall be included in
+# all copies or substantial portions of the Software.
 #
-#THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-#IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-#FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-#AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-#LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-#OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-#THE SOFTWARE.
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+# THE SOFTWARE.
 
 import os
 import logging
@@ -235,8 +235,8 @@ class RCubicScriptParser(object):
             matched = False
             for script in self.scripts():
                 if fnmatch.fnmatchcase(script.name, dep):
-                    #we return script names instead of job instances to let
-                    #ExecTree handle dangling deps
+                    # we return script names instead of job instances to let
+                    # ExecTree handle dangling deps
                     rval.append(script.name)
                     matched = True
             if not matched:
@@ -270,7 +270,7 @@ class RCubicScriptParser(object):
         self.tree.cwd = self.workdir
         self.tree.name = "rcubic"
 
-        #Initialize all sub trees
+        # Initialize all sub trees
         for script in self.scripts():
             if len(script.iterator) > 0:
                 tree = exectree.ExecTree()
@@ -282,11 +282,11 @@ class RCubicScriptParser(object):
                 )
                 self.subtrees[script.name] = tree
 
-        #Initialize Resources
+        # Initialize Resources
         for resource, limit in self.resources.items():
             exectree.ExecResource(self.tree, resource, limit)
 
-        #Initialize jobs and add to trees
+        # Initialize jobs and add to trees
         for script in self.scripts():
             script.job = exectree.ExecJob(
                     script.name,
@@ -310,16 +310,16 @@ class RCubicScriptParser(object):
             if script.idep is None:
                 self.tree.add_job(script.job)
             else:
-                #todo handle exception nicely
+                # todo handle exception nicely
                 self.subtrees[script.idep].add_job(script.job)
-        #Check for undefined resources
+        # Check for undefined resources
         if len(self.unusedresources) > 0:
             logging.warning(
                     "Resources referenced but not defined: {0}."
                     .format(", ".join(self.unusedresources))
             )
 
-        #Initialize and set up dependencies
+        # Initialize and set up dependencies
         for script in self.scripts():
             logging.debug("proccessing script: {0}".format(script.name))
             if script.idep is None:
@@ -346,7 +346,7 @@ class RCubicScriptParser(object):
                     d = tree.add_dep(dep, script.job)
                 d.color = {"defined":"lawngreen", "undefined":"palegreen"}
             for cdep in self._glob_expand(script.cdep):
-                #logging.debug("adding dep to ")
+                # logging.debug("adding dep to ")
                 try:
                     d = tree.add_dep(script.job, cdep)
                 except exectree.JobUndefinedError:
@@ -354,13 +354,13 @@ class RCubicScriptParser(object):
                     tree.add_job(cdep)
                     d = tree.add_dep(script.job, cdep)
                 d.color = {"defined":"lawngreen", "undefined":"palegreen"}
-            #stems = self.tree.stems()
+            # stems = self.tree.stems()
             for pdep in self.scripts():
-                #if pdep.phase < script.phase and pdep.job in stems:
+                # if pdep.phase < script.phase and pdep.job in stems:
                 if pdep.phase < script.phase and pdep.idep is None and script.idep is None:
                     d = tree.add_dep(pdep.job, script.job)
                     if d is None:
                         continue
                     d.color = {"defined":"gold2", "undefined":"gold2"}
-        #logging.debug("tree:\n{0}".format(etree.tostring(self.tree.xml(), pretty_print=True)))
+        # logging.debug("tree:\n{0}".format(etree.tostring(self.tree.xml(), pretty_print=True)))
         return self.tree
