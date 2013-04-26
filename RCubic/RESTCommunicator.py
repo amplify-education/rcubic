@@ -63,7 +63,7 @@ class RESTCommunicator(RESTServer):
         env -- expects a 'data' list TODO: paramaters
 
         """
-        logging.debug("Received Progress report for %s: %s" %(post['scriptName'], post['message']))
+        logging.debug("Received Progress report for %s: %s" % (post['scriptName'], post['message']))
         resp = self.rcubic.updateProgress(post['scriptName'], post['message'])
         start_response(responseCodes[200], responseTypes['plaintext'])
         return str(resp)
