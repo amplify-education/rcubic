@@ -50,7 +50,7 @@ class BotClient(RESTClient):
         message -- the message to send
 
         """
-        return self.getResponse("messageUser", data = {"user": user, "message": message, "token": self.token}, *args, **kwargs)
+        return self.getResponse("messageUser", data={"user": user, "message": message, "token": self.token}, *args, **kwargs)
 
     def waitForEvent(self, event):
         """Internal function, which waits for the event to be set.
@@ -82,7 +82,7 @@ class BotClient(RESTClient):
             ev = event.Event()
             self.restserver.registerCheckIn(room, checkInName, ev)
             events.append(ev)
-            self.getResponse("requestRoomCheckIn", data = {"checkInName": checkInName, "message": message, "room": room, 'callbackPort': port, "token": self.token}, *args, **kwargs)
+            self.getResponse("requestRoomCheckIn", data={"checkInName": checkInName, "message": message, "room": room, 'callbackPort': port, "token": self.token}, *args, **kwargs)
         else:
             # Go through all users and parse for pm or room
             for user in users:
@@ -94,9 +94,9 @@ class BotClient(RESTClient):
                     user = user + '@' + server
                 self.restserver.registerCheckIn(user, checkInName, ev)
                 if not room:
-                    self.getResponse("requestUserCheckIn", data = {"users": [user], "checkInName": checkInName, "message": message, "room": room, "callbackPort": port, "token": self.token}, *args, **kwargs)
+                    self.getResponse("requestUserCheckIn", data={"users": [user], "checkInName": checkInName, "message": message, "room": room, "callbackPort": port, "token": self.token}, *args, **kwargs)
             if room:
-                self.getResponse("requestUserCheckIn", data= {"users": users, "checkInName": checkInName, "message": message, "room": room, 'callbackPort': port, "token": self.token}, *args, **kwargs)
+                self.getResponse("requestUserCheckIn", data={"users": users, "checkInName": checkInName, "message": message, "room": room, 'callbackPort': port, "token": self.token}, *args, **kwargs)
         tasks = [gevent.spawn(self.waitForEvent, eve) for eve in events]
         # Wait for all check ins or timeout
         gevent.joinall(tasks, timeout=timeout)
