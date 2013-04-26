@@ -23,6 +23,7 @@
 
 from MiniREST.RESTClient import RESTClient
 
+
 class RCubicClient(RESTClient):
 
     """Extends the RESTClient class to provide an interface to an RCubicServer.
