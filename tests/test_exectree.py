@@ -58,7 +58,6 @@ class TestET(unittest.TestCase):
     def _tearDown(self):
         shutil.rmtree(self.workdir, False)
 
-
     def _logfile_init(self, job):
         fd, path = tempfile.mkstemp(
             prefix="{0}_inst".format(job.name), dir=self.workdir
@@ -119,7 +118,6 @@ class TestET(unittest.TestCase):
 
         logging.debug(graph.to_string())
 
-
     def test_multistem(self):
         """multistem detection"""
         self.assertEqual(self.tree.validate(), [])
@@ -142,7 +140,6 @@ class TestET(unittest.TestCase):
         self.assertFalse(job5 in stems)
         self.assertTrue(job6 in stems)
         self.assertNotEqual(self.tree.validate(), [])
-
 
     def test_own_parent(self):
         """Detect bootstrap paradox"""
@@ -180,7 +177,6 @@ class TestET(unittest.TestCase):
             logging.debug(v)
             raise
 
-
     def test_xml(self, tree=None):
         """xml export import export match"""
         if tree is None:
@@ -208,7 +204,6 @@ class TestET(unittest.TestCase):
         job4 = self._newjob("yut", self.tree, vfile=False)
         self.tree.add_dep(self.job3, job4)
         self.assertNotEqual(self.tree.validate(), [])
-
 
     def test_execjob_noexec(self):
         """Validates error on unexecutable job file"""
@@ -241,7 +236,6 @@ class TestET(unittest.TestCase):
 
         #Ensure xml export import works
         self.test_xml()
-
 
         #Lets break subtree in several differnt ways to ensure it fails
         #validation
@@ -276,7 +270,6 @@ class TestET(unittest.TestCase):
         with gevent.Timeout(10):
             self.tree.run()
         self.assertTrue(self.tree.is_done())
-
 
     def test_incomplete_tree(self):
         """Run tree with failed and sans mustcomplete jobs"""
@@ -505,7 +498,6 @@ class TestET(unittest.TestCase):
         self.assertTrue(self.tree.is_done())
         self.assertFalse(self.tree.is_success())
 
-
     def test_block_on_fail(self):
         """With waitsuccess ensure tree blocks on failure"""
         self.tree.waitsuccess = True
@@ -513,7 +505,6 @@ class TestET(unittest.TestCase):
         self.assertFalse(wfs)
         self.assertFalse(self.tree.is_done())
         self.assertFalse(self.tree.is_success())
-
 
     def test_skipped_step(self):
         """ Undefined job dependencies """
@@ -537,7 +528,6 @@ class TestET(unittest.TestCase):
                     self._save_event, times[job], event
                 )
                 job.events[event].rawlink(save_event_handler)
-
 
         with gevent.Timeout(10) as timeout:
             try:
