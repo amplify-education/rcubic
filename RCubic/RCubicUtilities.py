@@ -92,6 +92,7 @@ def popenNonblock(args, data='', stdin=subprocess.PIPE, stdout=subprocess.PIPE, 
     return (returncode, output)
 
 class LogToDB(object):
+
     def __init__(self, dbPath):
         self.dbPath = dbPath
         newdb = (not os.path.exists(self.dbPath))
