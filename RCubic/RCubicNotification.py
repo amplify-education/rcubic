@@ -31,6 +31,7 @@ import logging
 
 
 class RCubicNotification(object):
+
     """Manages notification groups and handles sending of messages"""
 
     def __init__(
