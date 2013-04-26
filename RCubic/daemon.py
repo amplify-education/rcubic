@@ -60,7 +60,7 @@ class Daemon:
         sys.stderr.flush()
         si = file(self.stdin, 'r')
         so = file(self.stdout, 'a+')
-        if self.stderr ==  self.stdout:
+        if self.stderr == self.stdout:
             se = so
         else:
             se = file(self.stderr, 'a+', 0)
