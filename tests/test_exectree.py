@@ -183,7 +183,7 @@ class TestET(unittest.TestCase):
             tree = self.tree
 
         tree1 = tree
-        xmltree1  = tree1.xml()
+        xmltree1 = tree1.xml()
         xmlstr1 = etree.tostring(xmltree1)
 
         tree2 = exectree.ExecTree(xmltree1)
