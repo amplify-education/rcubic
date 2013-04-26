@@ -28,22 +28,22 @@ from distutils.command.install import INSTALL_SCHEMES
 for scheme in INSTALL_SCHEMES.values():
     scheme['data'] = scheme['purelib']
 
-setup(name = 'RCubic',
-      version = '1.2',
-      description = 'RCubic',
+setup(name='RCubic',
+      version='1.2',
+      description='RCubic',
       # Required packages
-      requires = ['MiniREST', 'lxml', 'simplejson', 'pydot', 'gevent'],
+      requires=['MiniREST', 'lxml', 'simplejson', 'pydot', 'gevent'],
       # List what we provide and obolete for updates
-      provides = ['RCubic'],
-      obsoletes = ['RCubic'],
+      provides=['RCubic'],
+      obsoletes=['RCubic'],
       # Main packages
-      packages = ['RCubic'],
+      packages=['RCubic'],
       # Command line scripts
-      scripts = [
+      scripts=[
           'bin/rcubic', 'bin/rcubic-cli', 'bin/rcubic-checkin', 'bin/rcubic-migratedb'
           ],
       # Config files
-      data_files = [
+      data_files=[
           ('RCubic/', ["RCubic/rcubic.xml.template"]),
           ('RCubic/web/', ["RCubic/web/index.html"]),
           ('RCubic/web/archive/', ["RCubic/web/archive/index.html"]),
