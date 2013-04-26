@@ -49,7 +49,7 @@ class RCubicClient(RESTClient):
 
         """
         # user needs to be str(user) bc user is an xmpp object
-        return self.getResponse("checkInUser", data = {"user": str(user), "checkInName": checkInName, "token": self.token} , address=address, port=port, *args, **kwargs)
+        return self.getResponse("checkInUser", data = {"user": str(user), "checkInName": checkInName, "token": self.token}, address=address, port=port, *args, **kwargs)
 
     def progress(self, scriptName=None, message=None, *args, **kwargs):
         """Updates the percentage of script completion.
