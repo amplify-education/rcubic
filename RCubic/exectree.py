@@ -233,14 +233,11 @@ class ExecJob(object):
     @state.setter
     def state(self, value):
         if value not in self.STATES:
-            raise UnknownStateError(
-                "Job state cannot be changed to {0}.".format(value)
-            )
-        if self._state == value:
-            return
-        self._state = value
-        self.statechange.set()
-        self.events[self._state].set()
+            raise UnknownStateError("Job state cannot be changed to {0}.".format(value))
+        if self._state != value:
+            self._state = value
+            self.statechange.set()
+            self.events[self._state].set()
 
     @property
     def tree(self):
