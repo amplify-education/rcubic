@@ -89,8 +89,7 @@ class RESTCommunicator(RESTServer):
         start_response(responseCodes[200], responseTypes['plaintext'])
         if not resp:
             logging.warning("Reschedule request for %s failed." % post['scriptName'])
-            return str(False)
-        return str(True)
+        return str(bool(resp))
 
     def _manualOverride(self, env, start_response, post):
         """Responds to a 'manualOverride' request and calls rcubic.manualOverride(scriptName)
@@ -105,8 +104,7 @@ class RESTCommunicator(RESTServer):
         start_response(responseCodes[200], responseTypes['plaintext'])
         if not resp:
             logging.warning("Override request for %s failed." % scriptName)
-            return str(False)
-        return str(True)
+        return str(bool(resp))
 
     def _supported(self, env, start_response, post):
         """Responds to a requested asking if a feature is supported
