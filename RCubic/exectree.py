@@ -94,14 +94,14 @@ class ExecJob(object):
     UNDEF_JOB = "-"
 
     STATE_COLORS = {
-            STATE_IDLE: "white",
-            STATE_RUNNING: "yellow",
-            STATE_SUCCESSFULL: "lawngreen",
-            STATE_FAILED: "red",
-            STATE_CANCELLED: "deepskyblue",
-            STATE_UNDEF: "gray",
-            STATE_BLOCKED: "darkorange",
-            STATE_RESET: "white"
+        STATE_IDLE: "white",
+        STATE_RUNNING: "yellow",
+        STATE_SUCCESSFULL: "lawngreen",
+        STATE_FAILED: "red",
+        STATE_CANCELLED: "deepskyblue",
+        STATE_UNDEF: "gray",
+        STATE_BLOCKED: "darkorange",
+        STATE_RESET: "white"
     }
 
     def __init__(self, name="", jobpath=None, tree=None, logfile=None,
@@ -275,9 +275,9 @@ class ExecJob(object):
 
     def _dot_tree(self, font):
         subg = pydot.Subgraph(
-                self.subtree.cluster_name,
-                color="deepskyblue",
-                fontname=font
+            self.subtree.cluster_name,
+            color="deepskyblue",
+            fontname=font
         )
         if self.subtree.iterator is None:
             subg.set_label(self.name)
@@ -511,7 +511,7 @@ class ExecJob(object):
         fulfilled and resources are available"""
         if self.state == self.STATE_UNDEF and self.orphan():
             logging.debug("{0} is short circuiting ({1})".format(
-                    self.name, self.state
+                self.name, self.state
             )
             )
             self.events[self.STATE_RUNNING].set()
@@ -804,8 +804,8 @@ class ExecTree(object):
                     logging.error(
                         "Legend item is missing required xml attribute" "\
                         ({0}:{1}).".format(
-                            legenditem.base,
-                            legenditem.sourceline
+                        legenditem.base,
+                        legenditem.sourceline
                     )
                     )
                     raise
