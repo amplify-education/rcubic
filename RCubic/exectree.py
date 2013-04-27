@@ -838,6 +838,17 @@ class ExecTree(object):
     def __getitem__(self, key, default=None):
         return dict_by_attr(self.jobs, 'name').get(key, default)
 
+    # These functions added to satisfy pylint complaint about improperly
+    # implemented container
+    def __setitem__(self, key, value):
+        assert False, "Not implemented"
+
+    def __len__(self):
+        assert False, "Not implemented"
+
+    def __delitem__(self, key):
+        assert False, "Not implemented"
+
     def trees(self):
         """Generate all trees one by one"""
         yield self
