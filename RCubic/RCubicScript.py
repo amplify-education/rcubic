@@ -127,16 +127,10 @@ class RCubicGroup(object):
         return self.name
 
     def is_success(self):
-        for script in self.scripts:
-            if not script.job.is_success():
-                return False
-        return True
+        return all(script.job.is_success() for script in self.scripts)
 
     def is_done(self):
-        for script in self.scripts:
-            if not script.job.is_done():
-                return False
-        return True
+        return all(script.job.is_done() for script in self.scripts)
 
     def add_script(self, rs, override=False):
         if override:
