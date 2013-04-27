@@ -132,8 +132,8 @@ class LogToDB(object):
             " PRIMARY KEY (time, groupe, job, status))"
         self.conn.execute(query)
         query = "CREATE TABLE latest_events (time integer, groupe text, version text, githead text, job text, status text, " \
-                                " FOREIGN KEY (time, groupe, job, status) REFERENCES event(time, groupe, job, status), " \
-                                " UNIQUE (groupe, job))"
+            " FOREIGN KEY (time, groupe, job, status) REFERENCES event(time, groupe, job, status), " \
+            " UNIQUE (groupe, job))"
         self.conn.execute(query)
         query = "CREATE TABLE rcubic_db_support(db_version text unique)"
         self.conn.execute(query)
