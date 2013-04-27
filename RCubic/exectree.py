@@ -1129,8 +1129,8 @@ class ExecTree(object):
         for job in self.jobs:
             if job.mustcomplete:
                 if (not self.cancelled
-                     and self.waitsuccess
-                     and not job.is_success()
+                   and self.waitsuccess
+                   and not job.is_success()
                         ):
                     logging.debug("{0} is not successfull".format(job.name))
                     return False
