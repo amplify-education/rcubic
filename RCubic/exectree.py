@@ -106,10 +106,8 @@ class ExecJob(object):
     def __init__(self, name="", jobpath=None, tree=None, logfile=None,
             xml=None, execiter=None, mustcomplete=True, subtree=None,
             arguments=None, resources=None, href="", tcolor="lavender"):
-        if arguments is None:
-            arguments = []
-        if resources is None:
-            resources = []
+        arguments = arguments or []
+        resources = resources or []
         if xml is not None:
             if tree is None:
                 # TODO make tree param required
@@ -145,8 +143,7 @@ class ExecJob(object):
                 fr = tree.find_resource(resource.attrib["uuid"])
                 if fr is not None:
                     resources.append(fr)
-            if logfile == "":
-                logfile = None
+            logfile = logfile or None
             if jobpath == "":
                 jobpath = None
             elif subtreeuuid is not None:
@@ -197,10 +194,7 @@ class ExecJob(object):
             args["jobpath"] = str(self.jobpath)
         elif self.subtree is not None:
             args["subtreeuuid"] = str(self.subtree.uuid.hex)
-        if self.logfile is None:
-            args["logfile"] = ""
-        else:
-            args["logfile"] = self.logfile
+        args["logfile"] = self.logfile or ""
         eti = et.Element("execJob", args)
 
         if self.arguments is not None:
@@ -614,12 +608,8 @@ class ExecJob(object):
 
 
 class ExecIter(object):
-
     def __init__(self, name=None, args=None):
-        if args is None:
-            self.args = []
-        else:
-            self.args = args
+        self.args = args or []
         self.run = 0
         self.valid = None
         self.name = name
@@ -656,7 +646,6 @@ class ExecIter(object):
 
 
 class ExecResource(object):
-
     def __init__(self, tree, name="", avail=0, xml=None):
         if xml is not None:
             if xml.tag != "execResource":
@@ -725,7 +714,6 @@ class ExecResource(object):
 
 
 class ExecDependency(object):
-
     def __init__(self, parent, child, state=ExecJob.STATE_SUCCESSFULL):
         self.parent = parent
         self.child = child
@@ -795,7 +783,6 @@ class ExecDependency(object):
 
 
 class ExecTree(object):
-
     def __init__(self, xml=None):
         self.jobs = []
         self.deps = []
@@ -914,23 +901,16 @@ class ExecTree(object):
 
     def find_jobs(self, needle, default=None):
         """ Find all jobs based on their name / uuid """
-        if default is None:
-            default = []
         rval = [
             n for n in self.jobs
             if fnmatch.fnmatchcase(n.name, needle) or n.name.uuid.hex == needle
             ]
-        if rval:
-            return rval
-        else:
-            return default
+        return rval or default or []
 
     def find_job(self, needle, default=None):
         """ Find job based on name or uuid """
         for job in self.jobs:
-            if job.name == needle:
-                return job
-            elif job.uuid.hex == needle:
+            if needle in (job.name, job.uuid.hex):
                 return job
         return default
 
@@ -1181,8 +1161,7 @@ class ExecTree(object):
 
     def validate_nocycles(self, job, visited, parents=None):
         """ Ensure we do not have cyclical dependencies in the tree """
-        if parents is None:
-            parents = []
+        parents = parents or []
         if job in parents:
             return False
         parents.append(job)
