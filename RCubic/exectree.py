@@ -77,6 +77,7 @@ class IterratorOverrunError(RuntimeError):
     pass
 
 
+# pylint: disable=W0201
 # class ExecJob(Greenlet):
 class ExecJob(object):
     STATES = (0, 1, 2, 3, 4, 5, 6, 7)
