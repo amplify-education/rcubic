@@ -85,9 +85,7 @@ class RCubicNotification(object):
                 )
                 return False
         else:
-            logging.debug("Notification skipped: {0}, {1}, {2}"
-                          .format(groups, subject, message)
-            )
+            logging.debug("Notification skipped: {0}, {1}, {2}".format(groups, subject, message))
             return False
 
     def has_groups(self, groups):
