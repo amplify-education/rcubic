@@ -47,7 +47,7 @@ class RCubicNotification(object):
 
     def disable(self):
         """Disable all outbound communication"""
-        if self.enabled == True:
+        if self.enabled:
             logging.debug("Notifications have been disabled.")
         self.enabled = False
 
