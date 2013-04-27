@@ -333,25 +333,16 @@ class ExecJob(object):
         """ Ensure job can perform what is required of it at execution """
         errors = []
         if self.jobpath is not None and self.subtree is not None:
-            errors.append(
-                "subtree and jobpath of {0} are set. Only one can be set."
-                .format(self.name)
-            )
+            errors.append("subtree and jobpath of {0} are set. Only one can be set.".format(self.name))
         elif self.jobpath is not None:
             if self.jobpath == self.UNDEF_JOB:
                 # We allow existance of no-op jobs
                 pass
             elif not os.path.exists(self.jobpath):
-                errors.append(
-                    "{0}File {1} for needed by job {2} does not exist."
-                    .format(prepend, self.jobpath, self.name)
-                )
+                errors.append("{0}File {1} for needed by job {2} does not exist.".format(prepend, self.jobpath, self.name))
             else:
                 if not os.access(self.jobpath, os.X_OK):
-                    errors.append(
-                        "{0}File {1} for needed by job {2} is not executable."
-                        .format(prepend, self.jobpath, self.name)
-                    )
+                    errors.append("{0}File {1} for needed by job {2} is not executable.".format(prepend, self.jobpath, self.name))
         elif self.subtree is not None:
             errors.extend(self.subtree.validate())
         else:
@@ -925,23 +916,15 @@ class ExecTree(object):
         if not isinstance(child, ExecJob):
             child = self.find_job(child, child)
             if not isinstance(child, ExecJob):
-                raise JobUndefinedError(
-                    "Child job {0} is not defined in tree: {1}."
-                    .format(child, self.name)
-                )
+                raise JobUndefinedError("Child job {0} is not defined in tree: {1}.".format(child, self.name))
 
         # Parent and Child must be members of the tree
         for k in [child, parent]:
             if k not in self.jobs:
-                raise JobUndefinedError(
-                    "Job {0} is not part of the tree: {1}."
-                    .format(k.name, self.name)
-                )
+                raise JobUndefinedError("Job {0} is not part of the tree: {1}.".format(k.name, self.name))
 
         if parent is child:
-            raise DependencyError("Child cannot be own parent ({0})."
-                                  .format(parent.name)
-            )
+            raise DependencyError("Child cannot be own parent ({0}).".format(parent.name))
 
         if parent not in child.parents():
             dep = ExecDependency(parent, child, state)
@@ -1180,27 +1163,18 @@ class ExecTree(object):
         if blocking:
             with gevent.Timeout(timeout) as timeout:
                 try:
-                    logging.debug(
-                        "Jobs have been spun up for {0}. I'm gonna chill"
-                        .format(self.name)
-                    )
+                    logging.debug("Jobs have been spun up for {0}. I'm gonna chill".format(self.name))
                     gevent.sleep(1)
                     logging.debug(
                         "Chilling is done. Impatiently waiting for jobs of"
                         "{0} to finish".format(self.name)
                     )
                     self.join()
-                    logging.debug(
-                        "Tree {0} has finished execution."
-                        .format(self.name)
-                    )
+                    logging.debug("Tree {0} has finished execution.".format(self.name))
                 except gevent.timeout.Timeout, tobject:
                     if tobject != timeout:
                         raise
-                    logging.warning(
-                        "Execution of tree exceeded time limit ({0} seconds)."
-                        .format(timeout)
-                    )
+                    logging.warning("Execution of tree exceeded time limit ({0} seconds).".format(timeout))
                     self.cancel()
                     return
 
