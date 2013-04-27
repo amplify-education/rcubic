@@ -83,7 +83,7 @@ class ExecJob(object):
     STATES = (0, 1, 2, 3, 4, 5, 6, 7)
     (STATE_IDLE, STATE_RUNNING, STATE_SUCCESSFULL, STATE_FAILED,
         STATE_CANCELLED, STATE_UNDEF, STATE_RESET, STATE_BLOCKED
-    ) = STATES
+     ) = STATES
     DEPENDENCY_STATES = [STATE_SUCCESSFULL, STATE_FAILED]
     DONE_STATES = [
         STATE_SUCCESSFULL, STATE_FAILED, STATE_CANCELLED, STATE_UNDEF
@@ -1131,7 +1131,7 @@ class ExecTree(object):
                 if (not self.cancelled
                      and self.waitsuccess
                      and not job.is_success()
-                   ):
+                    ):
                     logging.debug("{0} is not successfull".format(job.name))
                     return False
                 if not job.is_done():
