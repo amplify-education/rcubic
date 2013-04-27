@@ -129,7 +129,7 @@ class LogToDB(object):
     def _initDB(self, conn):
         # TODO does githead have to be in primary key?
         query = "CREATE TABLE events (time integer, groupe text, version text, githead text, job text, status text, " \
-                                " PRIMARY KEY (time, groupe, job, status))"
+            " PRIMARY KEY (time, groupe, job, status))"
         self.conn.execute(query)
         query = "CREATE TABLE latest_events (time integer, groupe text, version text, githead text, job text, status text, " \
                                 " FOREIGN KEY (time, groupe, job, status) REFERENCES event(time, groupe, job, status), " \
@@ -165,8 +165,8 @@ class LogToDB(object):
                 return self.verComp(version, rows[0][0]) > 0
             except VersionCompareError:
                 logging.warning(
-                        "Versions ({0}, {1}) cannot be compared due to format error for group {2}."
-                        .format(version, rows[0][0], group)
+                    "Versions ({0}, {1}) cannot be compared due to format error for group {2}."
+                    .format(version, rows[0][0], group)
                 )
                 return True
         else:
