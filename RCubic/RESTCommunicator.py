@@ -1,6 +1,5 @@
 # vim: ts=4 noet filetype=python
 
-
 # This file is part of RCubic
 #
 # Copyright (c) 2012 Wireless Generation, Inc.
@@ -22,16 +21,13 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
-
+import logging
 
 # RESTServer imports
 from MiniREST.RESTServer import RESTServer, responseCodes, responseTypes
 
-import logging
-
 
 class RESTCommunicator(RESTServer):
-
     """RESTCommunicator - creates a new RESTCommunicator instance.
     Extends RESTServer with custom functions.
 
