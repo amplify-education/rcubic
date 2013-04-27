@@ -963,14 +963,9 @@ class ExecTree(object):
 
     def _gparent_compile(self, job, gparents):
         parents = job.parents()
-        if job in gparents:
-            return gparents[job] + parents
-        gparents[job] = []
-        for parent in parents:
-            # we don't use extend to dedupe
-            for e in self._gparent_compile(parent, gparents):
-                if e not in gparents[job]:
-                    gparents[job].append(e)
+        if job not in gparents:
+            tmp = set(e for parent in parents for e in self._gparent_compile(parent, gparents))
+            gparents[job] = list(tmp)
         return gparents[job] + parents
 
     def dot_graph(self, graph=None, arborescent=False, font="sans-serif"):
