@@ -23,12 +23,11 @@
 
 import os
 import logging
-import time
 import re
 import fnmatch
-from RCubic import exectree
-from lxml import etree
 import subprocess
+
+from RCubic import exectree
 
 
 class ConfigurationError(Exception):
