@@ -52,7 +52,7 @@ setup(
     # Command line scripts
     scripts=[
         'bin/rcubic', 'bin/rcubic-cli', 'bin/rcubic-checkin', 'bin/rcubic-migratedb'
-        ],
+    ],
     # Config files
     data_files=[
         ('RCubic/', ["RCubic/rcubic.xml.template"]),
@@ -61,7 +61,7 @@ setup(
         ('RCubic/web/', [
             "RCubic/web/index.html",
             "RCubic/web/archive.html"
-            ]),
+        ]),
         ('RCubic/web/css/', [
         "RCubic/web/css/jquery.qtip.min.css",
         "RCubic/web/css/select2.css",
