@@ -30,9 +30,11 @@ import errno
 import fcntl
 import sqlite3
 import logging
+from operator import attrgetter
 
 import gevent
 from gevent import socket
+
 
 class VersionCompareError(Exception):
     pass
@@ -40,6 +42,11 @@ class VersionCompareError(Exception):
 
 class FatalRuntimeError(RuntimeError):
     pass
+
+
+def dict_by_attr(series, name):
+    a = attrgetter(name)
+    return dict((a(item), item) for item in series)
 
 
 def popenNonblock(args, data='', stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, cwd=None, logFile=None):
@@ -101,7 +108,6 @@ def popenNonblock(args, data='', stdin=subprocess.PIPE, stdout=subprocess.PIPE, 
 
 
 class LogToDB(object):
-
     def __init__(self, dbPath):
         self.dbPath = dbPath
         newdb = (not os.path.exists(self.dbPath))
