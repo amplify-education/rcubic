@@ -102,10 +102,7 @@ class BotClient(RESTClient):
         gevent.joinall(tasks, timeout=timeout)
         # Assume everyone checked in, and see if someone didn't
         # (meaning we timed out)
-        ret = True
-        for eve in events:
-            if not eve.isSet():
-                ret = False
+        ret = all(eve.isSet() for eve in events)
         # Remove pongs from waiting
         self.restserver.unRegisterCheckIn(checkInName)
         return ret
