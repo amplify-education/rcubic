@@ -603,9 +603,7 @@ class ExecIter(object):
         logging.debug(
             "is_exhausted {0}>{1}".format(self.run, len(self.args))
         )
-        if self.run >= len(self.args):
-            return True
-        return False
+        return self.run >= len(self.args)
 
     def len(self):
         """ Number of elements in iterator"""
