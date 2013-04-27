@@ -856,9 +856,7 @@ class ExecTree(object):
     def find_resource(self, needle, default=None):
         """ Find all resources by uuid or name """
         for resource in self.resources:
-            if resource.uuid.hex == needle:
-                return resource
-            elif resource.name == needle:
+            if needle in (resource.uuid.hex, resource.name):
                 return resource
         return default
 
