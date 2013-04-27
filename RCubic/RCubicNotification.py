@@ -37,7 +37,7 @@ class RCubicNotification(object):
     def __init__(
             self, emailfrom='rcubic@example.com', subject='rcubic:',
             server='localhost', carboncopy=''
-        ):
+    ):
         self.email = {}
         self.enabled = True
         self.emailfrom = emailfrom
@@ -47,7 +47,7 @@ class RCubicNotification(object):
 
     def disable(self):
         """Disable all outbound communication"""
-        if self.enabled == True:
+        if self.enabled:
             logging.debug("Notifications have been disabled.")
         self.enabled = False
 
@@ -85,9 +85,7 @@ class RCubicNotification(object):
                 )
                 return False
         else:
-            logging.debug("Notification skipped: {0}, {1}, {2}"
-                .format(groups, subject, message)
-            )
+            logging.debug("Notification skipped: {0}, {1}, {2}".format(groups, subject, message))
             return False
 
     def has_groups(self, groups):

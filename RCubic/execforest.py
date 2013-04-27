@@ -22,7 +22,7 @@
 # THE SOFTWARE.
 
 
-class ExecForest:
+class ExecForest(object):
 
     """ExecForest is to be used as daemon to manage many exectrees"""
 

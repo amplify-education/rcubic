@@ -23,20 +23,15 @@
 
 import os
 import logging
-import time
 import re
 import fnmatch
-from RCubic import exectree
-from lxml import etree
 import subprocess
 
-
-class ConfigurationError(Exception):
-    pass
+from RCubic import exectree
+from RCubic.RCubicUtilities import ConfigurationError
 
 
 class RCubicScript(object):
-
     def __init__(self, filepath, version, override, phase, logdir, whitelist, blacklist, regexval, group):
         self.path = filepath
         self.name = filepath.split("/")[-1]
@@ -73,33 +68,23 @@ class RCubicScript(object):
             self.path = "-"
 
     def _get_param(self, script, field, default=None):
-        fieldre = re.compile("^#%s:.*$" % (field), re.MULTILINE)
-        begin = re.compile("^#[A-Z0-9]+:[\s]*")
+        fieldre = re.compile(r"^[\s]*#%s:.*$" % (field), re.MULTILINE)
+        begin = re.compile(r"^#[A-Z0-9]+:[\s]*")
         line = fieldre.search(script)
-        if line:
-            return begin.sub("", line.group(0), 1)
-        else:
-            return default
+        return begin.sub("", line.group(0), 1) if line else default
 
     def _param_split(self, param):
-        val = []
-        if param is not None:
-            seperator = re.compile("[,;\s]+")
-            val = seperator.split(param)
-            while "" in val:
-                val.remove("")
-        return val
+        # Warning: code change not covered in tests
+        # Split output by delimiters, eliminate empty strings
+        separator = re.compile(r"[,;\s]+")
+        return filter(None, separator.split(param)) if param else []
 
     def _parseHeaderLine(self, line):
-        begin = re.compile("^#[A-Z0-9]+:[\s]*")
-        seperator = re.compile("[,;\s]+")
-        retVal = seperator.split(begin.sub("", line, 1))
-        while True:
-            try:
-                retVal.remove("")
-            except ValueError:
-                break
-        return retVal
+        # Warning: code change not covered in tests
+        # Split output by delimiters, eliminate empty strings
+        begin = re.compile(r"^#[A-Z0-9]+:[\s]*")
+        separator = re.compile(r"[,;\s]+")
+        return filter(None, separator.split(begin.sub("", line, 1)))
 
 
 class RCubicGroup(object):
@@ -110,26 +95,26 @@ class RCubicGroup(object):
             self.name = element.attrib["group"]
         except KeyError:
             raise ConfigurationError(
-                    "Element on line %i of %s is missing version or group attributes."
-                    % (element.sourceline, element.base)
+                "Element on line %i of %s is missing version or group attributes."
+                % (element.sourceline, element.base)
             )
 
         try:
             self.phase = RCubicScriptParser.PHASES[
-                    element.attrib.get("phase", "DEFAULT").upper()
+                element.attrib.get("phase", "DEFAULT").upper()
             ]
         except:
             raise ConfigurationError(
-                    "Attribute phase on line %i of %s has unrecognized value: '%s'."
-                    % (element.sourceline, element.base, self.phase)
+                "Attribute phase on line %i of %s has unrecognized value: '%s'."
+                % (element.sourceline, element.base, self.phase)
             )
 
         def booler(element, attrib, default):
             value = element.attrib.get(attrib, default).lower()
             if value not in ["true", "false"]:
                 raise ConfigurationError(
-                        "Attribute {0} is not (true|false) on line {1} of {2}."
-                        .format(attrib, element.sourceline, element.base)
+                    "Attribute {0} is not (true|false) on line {1} of {2}."
+                    .format(attrib, element.sourceline, element.base)
                 )
             return value == "true"
 
@@ -142,20 +127,14 @@ class RCubicGroup(object):
         return self.name
 
     def is_success(self):
-        for script in self.scripts:
-            if not script.job.is_success():
-                return False
-        return True
+        return all(script.job.is_success() for script in self.scripts)
 
     def is_done(self):
-        for script in self.scripts:
-            if not script.job.is_done():
-                return False
-        return True
+        return all(script.job.is_done() for script in self.scripts)
 
     def add_script(self, rs, override=False):
         if override:
-            logging.debug("{0} is being overriden by {1}".format(rs.name, rs.path))
+            logging.debug("{0} is being overridden by {1}".format(rs.name, rs.path))
             for script in self.scripts:
                 if script.name == rs.name:
                     self.scripts.remove(script)
@@ -173,26 +152,16 @@ class RCubicScriptParser(object):
         if blacklist and whitelist:
             logging.warning("Conflicting whitelist/blacklist option. Ignoring blacklist.")
             blacklist = []
-        elif blacklist is None:
-            blacklist = []
-        elif whitelist is None:
-            whitelist = []
-        self.blacklist = blacklist
-        self.whitelist = whitelist
-        if regexval is not None:
-            regexval = re.compile(regexval, re.MULTILINE)
-        self.regexval = regexval
+        self.blacklist = blacklist or []
+        self.whitelist = whitelist or []
+        self.regexval = re.compile(regexval, re.MULTILINE) if regexval else None
         self.resources = resources
         self.unusedresources = []
         self.tree = None
         self.subtrees = {}
 
     def scripts(self):
-        scripts = []
-        for group in self.groups:
-            for script in group.scripts:
-                scripts.append(script)
-        return scripts
+        return [script for group in self.groups for script in group.scripts]
 
     def read_dirs(self, directory, override=False):
         failed_groups = []
@@ -212,22 +181,22 @@ class RCubicScriptParser(object):
                 filepath = "{0}/{1}".format(groupdir, filename)
                 if filename.startswith("{0}_".format(group)):
                     rs = RCubicScript(
-                            filepath,
-                            group.version,
-                            override,
-                            group.phase,
-                            self.logdir,
-                            self.whitelist,
-                            self.blacklist,
-                            self.regexval,
-                            group,
+                        filepath,
+                        group.version,
+                        override,
+                        group.phase,
+                        self.logdir,
+                        self.whitelist,
+                        self.blacklist,
+                        self.regexval,
+                        group,
                     )
                     group.add_script(rs, override)
                 else:
                     logging.debug(
-                                    "Skipping {0}/{1}, does not start with {2}_."
-                                    .format(filepath, group)
-                            )
+                        "Skipping {0}/{1}, does not start with {2}_."
+                        .format(filepath, group)
+                    )
 
     def _glob_expand(self, deps):
         rval = []
@@ -251,10 +220,11 @@ class RCubicScriptParser(object):
             else:
                 p = subprocess.Popen(script.iterator, stdout=subprocess.PIPE, stderr=devnull, cwd=self.workdir)
                 output = p.communicate()[0]
-        seperator = re.compile("[,;\s]+")
-        args = seperator.split(output)
-        while "" in args:
-            args.remove("")
+
+        # Split output by delimiters, eliminate empty strings
+        separator = re.compile(r"[,;\s]+")
+        args = filter(None, separator.split(output))
+
         logging.debug("Arguments {0}".format(args))
         return args
 
@@ -262,7 +232,7 @@ class RCubicScriptParser(object):
         logging.debug("set hrefs")
         for script in self.scripts():
             script.href = "{0}/gitweb?p={1};a=blob;f={2};hb={3}".format(
-                    gerrit, project, script.path[len(repopath) + 1:], githash
+                gerrit, project, script.path[len(repopath) + 1:], githash
             )
 
     def init_tree(self):
@@ -277,8 +247,8 @@ class RCubicScriptParser(object):
                 tree.cwd = self.workdir
                 tree.name = script.name
                 tree.iterator = exectree.ExecIter(
-                        "{0}_iter".format(script.name),
-                        self.eval_args(script)
+                    "{0}_iter".format(script.name),
+                    self.eval_args(script)
                 )
                 self.subtrees[script.name] = tree
 
@@ -289,11 +259,11 @@ class RCubicScriptParser(object):
         # Initialize jobs and add to trees
         for script in self.scripts():
             script.job = exectree.ExecJob(
-                    script.name,
-                    script.path,
-                    logfile=script.logfile,
-                    arguments=[script.version],
-                    href=script.href
+                script.name,
+                script.path,
+                logfile=script.logfile,
+                arguments=[script.version],
+                href=script.href
             )
             if script.name in self.subtrees:
                 script.job.jobpath = None
@@ -315,8 +285,8 @@ class RCubicScriptParser(object):
         # Check for undefined resources
         if len(self.unusedresources) > 0:
             logging.warning(
-                    "Resources referenced but not defined: {0}."
-                    .format(", ".join(self.unusedresources))
+                "Resources referenced but not defined: {0}."
+                .format(", ".join(self.unusedresources))
             )
 
         # Initialize and set up dependencies

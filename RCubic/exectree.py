@@ -22,15 +22,8 @@
 # THE SOFTWARE.
 
 import uuid
-import pydot
-# import xml.etree.ElementTree as et
-from lxml import etree as et
-import gevent
-from gevent import (Greenlet, event, socket)
 import os
 import random
-# from itertools import ifilter
-# from operator import methodcaller
 import subprocess
 import fcntl
 import errno
@@ -39,6 +32,13 @@ import logging
 import simplejson
 import re
 import fnmatch
+
+from lxml import etree as et
+import gevent
+from gevent import (Greenlet, event, socket)
+import pydot
+
+from RCubic.RCubicUtilities import dict_by_attr
 
 
 class TreeDefinedError(RuntimeError):
@@ -77,12 +77,13 @@ class IterratorOverrunError(RuntimeError):
     pass
 
 
+# pylint: disable=W0201
 # class ExecJob(Greenlet):
 class ExecJob(object):
     STATES = (0, 1, 2, 3, 4, 5, 6, 7)
     (STATE_IDLE, STATE_RUNNING, STATE_SUCCESSFULL, STATE_FAILED,
         STATE_CANCELLED, STATE_UNDEF, STATE_RESET, STATE_BLOCKED
-    ) = STATES
+     ) = STATES
     DEPENDENCY_STATES = [STATE_SUCCESSFULL, STATE_FAILED]
     DONE_STATES = [
         STATE_SUCCESSFULL, STATE_FAILED, STATE_CANCELLED, STATE_UNDEF
@@ -93,23 +94,21 @@ class ExecJob(object):
     UNDEF_JOB = "-"
 
     STATE_COLORS = {
-            STATE_IDLE: "white",
-            STATE_RUNNING: "yellow",
-            STATE_SUCCESSFULL: "lawngreen",
-            STATE_FAILED: "red",
-            STATE_CANCELLED: "deepskyblue",
-            STATE_UNDEF: "gray",
-            STATE_BLOCKED: "darkorange",
-            STATE_RESET: "white"
+        STATE_IDLE: "white",
+        STATE_RUNNING: "yellow",
+        STATE_SUCCESSFULL: "lawngreen",
+        STATE_FAILED: "red",
+        STATE_CANCELLED: "deepskyblue",
+        STATE_UNDEF: "gray",
+        STATE_BLOCKED: "darkorange",
+        STATE_RESET: "white"
     }
 
     def __init__(self, name="", jobpath=None, tree=None, logfile=None,
-            xml=None, execiter=None, mustcomplete=True, subtree=None,
-            arguments=None, resources=None, href="", tcolor="lavender"):
-        if arguments is None:
-            arguments = []
-        if resources is None:
-            resources = []
+                 xml=None, execiter=None, mustcomplete=True, subtree=None,
+                 arguments=None, resources=None, href="", tcolor="lavender"):
+        arguments = arguments or []
+        resources = resources or []
         if xml is not None:
             if tree is None:
                 # TODO make tree param required
@@ -145,8 +144,7 @@ class ExecJob(object):
                 fr = tree.find_resource(resource.attrib["uuid"])
                 if fr is not None:
                     resources.append(fr)
-            if logfile == "":
-                logfile = None
+            logfile = logfile or None
             if jobpath == "":
                 jobpath = None
             elif subtreeuuid is not None:
@@ -160,9 +158,7 @@ class ExecJob(object):
         else:
             uuidi = uuid.uuid4()
 
-        self.events = {}
-        for e in self.STATES:
-            self.events[e] = gevent.event.Event()
+        self.events = dict((e, gevent.event.Event()) for e in self.STATES)
         self.statechange = gevent.event.Event()
         self.name = name
         self.uuid = uuidi
@@ -197,24 +193,14 @@ class ExecJob(object):
             args["jobpath"] = str(self.jobpath)
         elif self.subtree is not None:
             args["subtreeuuid"] = str(self.subtree.uuid.hex)
-        if self.logfile is None:
-            args["logfile"] = ""
-        else:
-            args["logfile"] = self.logfile
+        args["logfile"] = self.logfile or ""
         eti = et.Element("execJob", args)
 
-        if self.arguments is not None:
-            for arg in self.arguments:
-                eti.append(et.Element("execArg", {"value": arg}))
+        for arg in (self.arguments or []):
+            eti.append(et.Element("execArg", {"value": arg}))
 
-        if self.resources is not None:
-            for resource in self.resources:
-                eti.append(
-                    et.Element(
-                        "execResource",
-                        {"uuid": str(resource.uuid.hex)}
-                    )
-                )
+        for resource in (self.resources or []):
+            eti.append(et.Element("execResource", {"uuid": str(resource.uuid.hex)}))
 
         return eti
 
@@ -247,14 +233,11 @@ class ExecJob(object):
     @state.setter
     def state(self, value):
         if value not in self.STATES:
-            raise UnknownStateError(
-                "Job state cannot be changed to {0}.".format(value)
-            )
-        if self._state == value:
-            return
-        self._state = value
-        self.statechange.set()
-        self.events[self._state].set()
+            raise UnknownStateError("Job state cannot be changed to {0}.".format(value))
+        if self._state != value:
+            self._state = value
+            self.statechange.set()
+            self.events[self._state].set()
 
     @property
     def tree(self):
@@ -273,7 +256,7 @@ class ExecJob(object):
 
     @progress.setter
     def progress(self, value):
-        if value >= 0 and value <= 100:
+        if 0 <= value <= 100:
             self._progress = value
 
     def _dot_node(self, font):
@@ -284,18 +267,18 @@ class ExecJob(object):
             "color": self.tcolor,
             "penwidth": "3",
             "fontname": font,
-            }
+        }
         if self.href:
-            kw["href"] = "\"{0}\"".format(self.href)
+            kw["href"] = '"{0}"'.format(self.href)
         node = pydot.Node(label, **kw)
         return node
 
     def _dot_tree(self, font):
         subg = pydot.Subgraph(
-                self.subtree.cluster_name,
-                color="deepskyblue",
-                fontname=font
-            )
+            self.subtree.cluster_name,
+            color="deepskyblue",
+            fontname=font
+        )
         if self.subtree.iterator is None:
             subg.set_label(self.name)
         else:
@@ -326,12 +309,7 @@ class ExecJob(object):
         Used to check if job is connected to tree
         """
         # caching results will peformance
-        for parent in self.parents():
-            if parent.is_defined():
-                return True
-            elif parent.has_defined_anscestors():
-                return True
-        return False
+        return any(parent.is_defined() or parent.has_defined_anscestors() for parent in self.parents())
 
     def parent_deps(self):
         """ Return all jobs which are parents of this job """
@@ -349,31 +327,22 @@ class ExecJob(object):
 
     def orphan(self):
         """ True if job has no parents """
-        return len(self.parent_deps()) <= 0
+        return not self.parent_deps()
 
     def validate(self, prepend=""):
         """ Ensure job can perform what is required of it at execution """
         errors = []
         if self.jobpath is not None and self.subtree is not None:
-            errors.append(
-                "subtree and jobpath of {0} are set. Only one can be set."
-                .format(self.name)
-            )
+            errors.append("subtree and jobpath of {0} are set. Only one can be set.".format(self.name))
         elif self.jobpath is not None:
             if self.jobpath == self.UNDEF_JOB:
                 # We allow existance of no-op jobs
                 pass
             elif not os.path.exists(self.jobpath):
-                errors.append(
-                    "{0}File {1} for needed by job {2} does not exist."
-                    .format(prepend, self.jobpath, self.name)
-                )
+                errors.append("{0}File {1} for needed by job {2} does not exist.".format(prepend, self.jobpath, self.name))
             else:
                 if not os.access(self.jobpath, os.X_OK):
-                    errors.append(
-                        "{0}File {1} for needed by job {2} is not executable."
-                        .format(prepend, self.jobpath, self.name)
-                    )
+                    errors.append("{0}File {1} for needed by job {2} is not executable.".format(prepend, self.jobpath, self.name))
         elif self.subtree is not None:
             errors.extend(self.subtree.validate())
         else:
@@ -402,7 +371,7 @@ class ExecJob(object):
 
     @staticmethod
     def _popen(args, data='', stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT, cwd=None):
+               stderr=subprocess.STDOUT, cwd=None):
         """Communicate with the process non-blockingly.
         http://code.google.com/p/gevent/source/browse/examples/processes.py?r=2
         3469225e58196aeb89393ede697e6d11d88844b
@@ -458,8 +427,8 @@ class ExecJob(object):
 
     def reset(self):
         """ Prepares jobs to be executed again """
-        for key in self.events.iterkeys():
-            self.events[key].clear()
+        for event in self.events.values():
+            event.clear()
         if self.progress > 0:
             self.progress = 0
         self.state = self.STATE_RESET
@@ -533,8 +502,8 @@ class ExecJob(object):
         fulfilled and resources are available"""
         if self.state == self.STATE_UNDEF and self.orphan():
             logging.debug("{0} is short circuiting ({1})".format(
-                    self.name, self.state
-                )
+                self.name, self.state
+            )
             )
             self.events[self.STATE_RUNNING].set()
             self.events[self.STATE_SUCCESSFULL].set()
@@ -593,10 +562,7 @@ class ExecJob(object):
             elif self.subtree is not None:
                 logging.debug("starting {0} {1}".format(self.name, "subtree"))
                 self.subtree.iterrun()
-                if self.subtree.is_success():
-                    rcode = 0
-                else:
-                    rcode = 1
+                rcode = int(not self.subtree.is_success())
             else:
                 logging.error("Hit unhandled start state for {0}.".format(self.name))
             logging.debug("finished {0} status {1}.".format(self.name, rcode))
@@ -614,12 +580,8 @@ class ExecJob(object):
 
 
 class ExecIter(object):
-
     def __init__(self, name=None, args=None):
-        if args is None:
-            self.args = []
-        else:
-            self.args = args
+        self.args = args or []
         self.run = 0
         self.valid = None
         self.name = name
@@ -632,9 +594,7 @@ class ExecIter(object):
         logging.debug(
             "is_exhausted {0}>{1}".format(self.run, len(self.args))
         )
-        if self.run >= len(self.args):
-            return True
-        return False
+        return self.run >= len(self.args)
 
     def len(self):
         """ Number of elements in iterator"""
@@ -651,12 +611,11 @@ class ExecIter(object):
         if len(self.args) <= 0:
             return ""
         elif self.run > len(self.args):
-            return self.args[len(self.args) - 1]
+            return self.args[-1]
         return self.args[self.run]
 
 
 class ExecResource(object):
-
     def __init__(self, tree, name="", avail=0, xml=None):
         if xml is not None:
             if xml.tag != "execResource":
@@ -683,8 +642,7 @@ class ExecResource(object):
             "uuid": str(self.uuid.hex),
             "avail": str(self.avail),
         }
-        eri = et.Element("execResource", args)
-        return eri
+        return et.Element("execResource", args)
 
     def reserve(self, blocking=True, timeout=None):
         """ Acquire reservation of ExecResource object
@@ -704,8 +662,8 @@ class ExecResource(object):
                         if self.event.wait(1):
                             self.event.clear()
                     self.used += 1
-                except gevent.timeout, timeout:
-                    if tobject != timeout:
+                except gevent.timeout as gtimeout:
+                    if tobject != gtimeout:
                         raise
                     return False
 
@@ -715,17 +673,12 @@ class ExecResource(object):
 
     def release(self):
         """ Release a previously acquired resource """
-        if self.avail < 0:
-            return
-        if self.used <= 0:
-            self.used = 0
-        else:
-            self.used -= 1
-        self.event.set()
+        if self.avail >= 0:
+            self.used = max(0, self.used - 1)
+            self.event.set()
 
 
 class ExecDependency(object):
-
     def __init__(self, parent, child, state=ExecJob.STATE_SUCCESSFULL):
         self.parent = parent
         self.child = child
@@ -795,7 +748,6 @@ class ExecDependency(object):
 
 
 class ExecTree(object):
-
     def __init__(self, xml=None):
         self.jobs = []
         self.deps = []
@@ -843,9 +795,9 @@ class ExecTree(object):
                     logging.error(
                         "Legend item is missing required xml attribute" "\
                         ({0}:{1}).".format(
-                            legenditem.base,
-                            legenditem.sourceline
-                        )
+                        legenditem.base,
+                        legenditem.sourceline
+                    )
                     )
                     raise
 
@@ -854,8 +806,7 @@ class ExecTree(object):
         """ Return cluster name """
         # pydot does not properly handle space in subtree
         name = self.name.replace(" ", "_")
-        return "\"cluster_{0}\"".format(name)
-        # return "\"cluster_{0}\"".format(self.name)
+        return '"cluster_{0}"'.format(name)
 
     def xml(self):
         args = {
@@ -885,10 +836,18 @@ class ExecTree(object):
         return "<ExecTree {0}>".format(self.name)
 
     def __getitem__(self, key, default=None):
-        for job in self.jobs:
-            if job.name == key:
-                return job
-        return default
+        return dict_by_attr(self.jobs, 'name').get(key, default)
+
+    # These functions added to satisfy pylint complaint about improperly
+    # implemented container
+    def __setitem__(self, key, value):
+        assert False, "Not implemented"
+
+    def __len__(self):
+        assert False, "Not implemented"
+
+    def __delitem__(self, key):
+        assert False, "Not implemented"
 
     def trees(self):
         """Generate all trees one by one"""
@@ -899,38 +858,25 @@ class ExecTree(object):
     def find_resource(self, needle, default=None):
         """ Find all resources by uuid or name """
         for resource in self.resources:
-            if resource.uuid.hex == needle:
-                return resource
-            elif resource.name == needle:
+            if needle in (resource.uuid.hex, resource.name):
                 return resource
         return default
 
-    def find_subtree(self, uuid_needle, default=None):
-        """ Find all subtrees by uuid """
-        for subtree in self.subtrees:
-            if subtree.uuid == uuid_needle:
-                return subtree
-        return default
+    def find_subtree(self, uuid, default=None):
+        return dict_by_attr(self.subtrees, 'uuid').get(uuid, default)
 
     def find_jobs(self, needle, default=None):
         """ Find all jobs based on their name / uuid """
-        if default is None:
-            default = []
         rval = [
             n for n in self.jobs
             if fnmatch.fnmatchcase(n.name, needle) or n.name.uuid.hex == needle
-            ]
-        if rval:
-            return rval
-        else:
-            return default
+        ]
+        return rval or default or []
 
     def find_job(self, needle, default=None):
         """ Find job based on name or uuid """
         for job in self.jobs:
-            if job.name == needle:
-                return job
-            elif job.uuid.hex == needle:
+            if needle in (job.name, job.uuid.hex):
                 return job
         return default
 
@@ -954,7 +900,7 @@ class ExecTree(object):
         self.jobs.append(job)
 
     def add_dep(self, parent=None, child=None,
-            state=ExecJob.STATE_SUCCESSFULL, xml=None):
+                state=ExecJob.STATE_SUCCESSFULL, xml=None):
         """Add a dependency between 2 jobs that have been previously added
         to tree"""
         colors = None
@@ -981,23 +927,15 @@ class ExecTree(object):
         if not isinstance(child, ExecJob):
             child = self.find_job(child, child)
             if not isinstance(child, ExecJob):
-                raise JobUndefinedError(
-                    "Child job {0} is not defined in tree: {1}."
-                    .format(child, self.name)
-                )
+                raise JobUndefinedError("Child job {0} is not defined in tree: {1}.".format(child, self.name))
 
         # Parent and Child must be members of the tree
         for k in [child, parent]:
             if k not in self.jobs:
-                raise JobUndefinedError(
-                    "Job {0} is not part of the tree: {1}."
-                    .format(k.name, self.name)
-                )
+                raise JobUndefinedError("Job {0} is not part of the tree: {1}.".format(k.name, self.name))
 
         if parent is child:
-            raise DependencyError("Child cannot be own parent ({0})."
-                .format(parent.name)
-            )
+            raise DependencyError("Child cannot be own parent ({0}).".format(parent.name))
 
         if parent not in child.parents():
             dep = ExecDependency(parent, child, state)
@@ -1019,14 +957,9 @@ class ExecTree(object):
 
     def _gparent_compile(self, job, gparents):
         parents = job.parents()
-        if job in gparents:
-            return gparents[job] + parents
-        gparents[job] = []
-        for parent in parents:
-            # we don't use extend to dedupe
-            for e in self._gparent_compile(parent, gparents):
-                if e not in gparents[job]:
-                    gparents[job].append(e)
+        if job not in gparents:
+            tmp = set(e for parent in parents for e in self._gparent_compile(parent, gparents))
+            gparents[job] = list(tmp)
         return gparents[job] + parents
 
     def dot_graph(self, graph=None, arborescent=False, font="sans-serif"):
@@ -1054,7 +987,7 @@ class ExecTree(object):
             legend = ""
             for key, value in self.legend.iteritems():
                 legend = "{2}{0}:\t{1}\\n".format(key, value, legend)
-            legend = "\"{0}\"".format(legend)
+            legend = '"{0}"'.format(legend)
             sg = pydot.Subgraph("noncelegendnonce", rank="sink")
             sg.add_node(
                 pydot.Node(
@@ -1081,8 +1014,7 @@ class ExecTree(object):
     def json_status(self, status=None):
         """ Return json string representing state of jobs.
         Can be used to update graph SVG through javascript"""
-        if status is None:
-            status = {}
+        status = status or {}
         for job in self.all_jobs_gen():
             status[job.name] = {
                 "status": job.STATE_COLORS[job.state],
@@ -1097,7 +1029,7 @@ class ExecTree(object):
 
     # dot's html map output is: "x,y x,y x,y"
     # but it should be: "x,y,x,y,x,y"
-    FIXCOORD = re.compile(' (?=[\d]*,[\d]*)')
+    FIXCOORD = re.compile(r' (?=[\d]*,[\d]*)')
 
     def write_status(self, svg, json, overwrite=False, arborescent=True):
         """Write a SVG and and JSON files containing graph data and state of
@@ -1117,22 +1049,17 @@ class ExecTree(object):
 
         WARNING This will not find stem of subtrees with cycles
         """
-        stems = []
-        for job in self.jobs:
-            if job.has_defined_anscestors() or not job.is_defined():
-                continue
-            stems.append(job)
-        return stems
+        return [
+            job
+            for job in self.jobs
+            if not job.has_defined_anscestors() and job.is_defined()
+        ]
 
     def leaves(self):
         """
         Finds and returns all the leaf jobs of a tree
         """
-        leaves = []
-        for job in self.jobs:
-            if len(job.child_deps()) > 0:
-                leaves.append(job)
-        return leaves
+        return [job for job in self.jobs if job.child_deps()]
 
     def validate(self):
         """ Check that job is i connected DAG, and all jobs are executable """
@@ -1140,9 +1067,7 @@ class ExecTree(object):
         stems = self.stems()
 
         if len(stems) == 0:
-            errors.append("Tree {0} is empty, has 0 stems."
-                .format(self.name, stems)
-            )
+            errors.append("Tree {0} is empty, has 0 stems.".format(self.name))
         elif len(stems) > 1:
             errors.append(
                 "Tree {0} has multiple stems ({1})."
@@ -1160,10 +1085,7 @@ class ExecTree(object):
                 errors.append("Tree {0} has cycles.".format(self.name))
 
             # What jobs are not connected to stem?
-            unconnected = []
-            for job in self.jobs:
-                if job.is_defined() and job not in visited:
-                    unconnected.append(job)
+            unconnected = [job for job in self.jobs if job.is_defined() and job not in visited]
             if len(unconnected) > 0:
                 errors.append(
                     "The jobs {0} are not connected to {1}."
@@ -1181,8 +1103,7 @@ class ExecTree(object):
 
     def validate_nocycles(self, job, visited, parents=None):
         """ Ensure we do not have cyclical dependencies in the tree """
-        if parents is None:
-            parents = []
+        parents = parents or []
         if job in parents:
             return False
         parents.append(job)
@@ -1201,10 +1122,7 @@ class ExecTree(object):
         """ True if all jobs in tree have completed execution """
         for job in self.jobs:
             if job.mustcomplete:
-                if (not self.cancelled
-                     and self.waitsuccess
-                     and not job.is_success()
-                   ):
+                if (not self.cancelled and self.waitsuccess and not job.is_success()):
                     logging.debug("{0} is not successfull".format(job.name))
                     return False
                 if not job.is_done():
@@ -1221,10 +1139,7 @@ class ExecTree(object):
 
     def is_success(self):
         """ True if all the jobs in tree have successfully executed """
-        for job in self.jobs:
-            if not job.is_success():
-                return False
-        return True
+        return all(job.is_success() for job in self.jobs)
 
     def cancel(self):
         # TODO break cancel into cancel and abort, cancel should be called externally we do want to kill off jobs without leaving cancel metadata all over the place
@@ -1249,34 +1164,25 @@ class ExecTree(object):
             return
         logging.debug("About to spin up jobs for {0}".format(self.name))
         for job in self.jobs:
-            for ek, ev in job.events.items():
+            for ev in job.events.values():
                 ev.rawlink(self._is_done_event)
             job.start()
         self.started = True
         if blocking:
             with gevent.Timeout(timeout) as timeout:
                 try:
-                    logging.debug(
-                        "Jobs have been spun up for {0}. I'm gonna chill"
-                        .format(self.name)
-                    )
+                    logging.debug("Jobs have been spun up for {0}. I'm gonna chill".format(self.name))
                     gevent.sleep(1)
                     logging.debug(
                         "Chilling is done. Impatiently waiting for jobs of"
                         "{0} to finish".format(self.name)
                     )
                     self.join()
-                    logging.debug(
-                        "Tree {0} has finished execution."
-                        .format(self.name)
-                    )
+                    logging.debug("Tree {0} has finished execution.".format(self.name))
                 except gevent.timeout.Timeout, tobject:
                     if tobject != timeout:
                         raise
-                    logging.warning(
-                        "Execution of tree exceeded time limit ({0} seconds)."
-                        .format(timeout)
-                    )
+                    logging.warning("Execution of tree exceeded time limit ({0} seconds).".format(timeout))
                     self.cancel()
                     return
 

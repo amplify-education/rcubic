@@ -1,6 +1,5 @@
 # vim: ts=4 noet filetype=python
 
-
 # This file is part of RCubic
 #
 # Copyright (c) 2012 Wireless Generation, Inc.
@@ -22,16 +21,13 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
-
+import logging
 
 # RESTServer imports
 from MiniREST.RESTServer import RESTServer, responseCodes, responseTypes
 
-import logging
-
 
 class RESTCommunicator(RESTServer):
-
     """RESTCommunicator - creates a new RESTCommunicator instance.
     Extends RESTServer with custom functions.
 
@@ -63,7 +59,7 @@ class RESTCommunicator(RESTServer):
         env -- expects a 'data' list TODO: paramaters
 
         """
-        logging.debug("Received Progress report for %s: %s" % (post['scriptName'], post['message']))
+        logging.debug("Received Progress report for {0}: {1}".format(post['scriptName'], post['message']))
         resp = self.rcubic.updateProgress(post['scriptName'], post['message'])
         start_response(responseCodes[200], responseTypes['plaintext'])
         return str(resp)
@@ -88,13 +84,12 @@ class RESTCommunicator(RESTServer):
 
         """
         scriptName = post['scriptName']
-        logging.info("Received reschedule request for %s." % scriptName)
+        logging.info("Received reschedule request for {0}.".format(scriptName))
         resp = self.rcubic.reschedule(scriptName)
         start_response(responseCodes[200], responseTypes['plaintext'])
         if not resp:
-            logging.warning("Reschedule request for %s failed." % post['scriptName'])
-            return str(False)
-        return str(True)
+            logging.warning("Reschedule request for {0} failed.".format(post['scriptName']))
+        return str(bool(resp))
 
     def _manualOverride(self, env, start_response, post):
         """Responds to a 'manualOverride' request and calls rcubic.manualOverride(scriptName)
@@ -104,13 +99,12 @@ class RESTCommunicator(RESTServer):
 
         """
         scriptName = post['scriptName']
-        logging.info("Received override request for %s." % scriptName)
+        logging.info("Received override request for {0}.".format(scriptName))
         resp = self.rcubic.manualOverride(scriptName)
         start_response(responseCodes[200], responseTypes['plaintext'])
         if not resp:
-            logging.warning("Override request for %s failed." % scriptName)
-            return str(False)
-        return str(True)
+            logging.warning("Override request for {0} failed.".format(scriptName))
+        return str(bool(resp))
 
     def _supported(self, env, start_response, post):
         """Responds to a requested asking if a feature is supported
@@ -121,10 +115,7 @@ class RESTCommunicator(RESTServer):
         """
         feature = post['feature']
         start_response(responseCodes[200], responseTypes['plaintext'])
-        if feature in self.features:
-            return str(True)
-        else:
-            return str(False)
+        return str(feature in self.features)
 
     def _cancel(self, env, start_response, post):
         """Responds to a 'cancel' request and calls rcubic.abort()

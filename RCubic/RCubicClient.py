@@ -25,7 +25,6 @@ from MiniREST.RESTClient import RESTClient
 
 
 class RCubicClient(RESTClient):
-
     """Extends the RESTClient class to provide an interface to an RCubicServer.
 
     """
@@ -64,19 +63,19 @@ class RCubicClient(RESTClient):
 
     def reclone(self, *args, **kwargs):
         """
-
+        Reclone it.
         """
         return self.getResponse("reclone", data={"token": self.token}, *args, **kwargs)
 
     def reschedule(self, scriptName=None, *args, **kwargs):
         """
-
+        Reschedule it.
         """
         return self.getResponse("reschedule", data={"scriptName": scriptName, "token": self.token}, *args, **kwargs)
 
     def manualOverride(self, scriptName=None, *args, **kwargs):
         """
-
+        Manually override
         """
         return self.getResponse("manualOverride", data={"scriptName": scriptName, "token": self.token}, *args, **kwargs)
 
