@@ -26,7 +26,6 @@ from MiniREST.RESTServer import RESTServer, responseCodes, responseTypes
 
 
 class RCubicServer(RESTServer):
-
     """RCubicServer - creates a new RCubicServer instance.
     Extends RESTServer with custom functions.
 
@@ -85,8 +84,8 @@ class RCubicServer(RESTServer):
         """
         try:
             events = self.receivedCheckIns.pop(checkInName)
-            for event in events:
-                events[event].set()
+            for event in events.values():
+                event.set()
             return True
         except KeyError:
             return False
