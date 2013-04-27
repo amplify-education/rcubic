@@ -29,10 +29,10 @@ import re
 import errno
 import fcntl
 import sqlite3
-import gevent
 import logging
-from gevent import (event, server, socket)
 
+import gevent
+from gevent import socket
 
 class VersionCompareError(Exception):
     pass
