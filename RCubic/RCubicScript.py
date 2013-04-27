@@ -152,15 +152,9 @@ class RCubicScriptParser(object):
         if blacklist and whitelist:
             logging.warning("Conflicting whitelist/blacklist option. Ignoring blacklist.")
             blacklist = []
-        elif blacklist is None:
-            blacklist = []
-        elif whitelist is None:
-            whitelist = []
-        self.blacklist = blacklist
-        self.whitelist = whitelist
-        if regexval is not None:
-            regexval = re.compile(regexval, re.MULTILINE)
-        self.regexval = regexval
+        self.blacklist = blacklist or []
+        self.whitelist = whitelist or []
+        self.regexval = re.compile(regexval, re.MULTILINE) if regexval else None
         self.resources = resources
         self.unusedresources = []
         self.tree = None
