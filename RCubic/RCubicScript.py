@@ -95,26 +95,26 @@ class RCubicGroup(object):
             self.name = element.attrib["group"]
         except KeyError:
             raise ConfigurationError(
-                    "Element on line %i of %s is missing version or group attributes."
-                    % (element.sourceline, element.base)
+                "Element on line %i of %s is missing version or group attributes."
+                % (element.sourceline, element.base)
             )
 
         try:
             self.phase = RCubicScriptParser.PHASES[
-                    element.attrib.get("phase", "DEFAULT").upper()
+                element.attrib.get("phase", "DEFAULT").upper()
             ]
         except:
             raise ConfigurationError(
-                    "Attribute phase on line %i of %s has unrecognized value: '%s'."
-                    % (element.sourceline, element.base, self.phase)
+                "Attribute phase on line %i of %s has unrecognized value: '%s'."
+                % (element.sourceline, element.base, self.phase)
             )
 
         def booler(element, attrib, default):
             value = element.attrib.get(attrib, default).lower()
             if value not in ["true", "false"]:
                 raise ConfigurationError(
-                        "Attribute {0} is not (true|false) on line {1} of {2}."
-                        .format(attrib, element.sourceline, element.base)
+                    "Attribute {0} is not (true|false) on line {1} of {2}."
+                    .format(attrib, element.sourceline, element.base)
                 )
             return value == "true"
 
@@ -181,21 +181,21 @@ class RCubicScriptParser(object):
                 filepath = "{0}/{1}".format(groupdir, filename)
                 if filename.startswith("{0}_".format(group)):
                     rs = RCubicScript(
-                            filepath,
-                            group.version,
-                            override,
-                            group.phase,
-                            self.logdir,
-                            self.whitelist,
-                            self.blacklist,
-                            self.regexval,
-                            group,
+                        filepath,
+                        group.version,
+                        override,
+                        group.phase,
+                        self.logdir,
+                        self.whitelist,
+                        self.blacklist,
+                        self.regexval,
+                        group,
                     )
                     group.add_script(rs, override)
                 else:
                     logging.debug(
-                                    "Skipping {0}/{1}, does not start with {2}_."
-                                    .format(filepath, group)
+                        "Skipping {0}/{1}, does not start with {2}_."
+                        .format(filepath, group)
                     )
 
     def _glob_expand(self, deps):
@@ -232,7 +232,7 @@ class RCubicScriptParser(object):
         logging.debug("set hrefs")
         for script in self.scripts():
             script.href = "{0}/gitweb?p={1};a=blob;f={2};hb={3}".format(
-                    gerrit, project, script.path[len(repopath) + 1:], githash
+                gerrit, project, script.path[len(repopath) + 1:], githash
             )
 
     def init_tree(self):
@@ -247,8 +247,8 @@ class RCubicScriptParser(object):
                 tree.cwd = self.workdir
                 tree.name = script.name
                 tree.iterator = exectree.ExecIter(
-                        "{0}_iter".format(script.name),
-                        self.eval_args(script)
+                    "{0}_iter".format(script.name),
+                    self.eval_args(script)
                 )
                 self.subtrees[script.name] = tree
 
@@ -259,11 +259,11 @@ class RCubicScriptParser(object):
         # Initialize jobs and add to trees
         for script in self.scripts():
             script.job = exectree.ExecJob(
-                    script.name,
-                    script.path,
-                    logfile=script.logfile,
-                    arguments=[script.version],
-                    href=script.href
+                script.name,
+                script.path,
+                logfile=script.logfile,
+                arguments=[script.version],
+                href=script.href
             )
             if script.name in self.subtrees:
                 script.job.jobpath = None
@@ -285,8 +285,8 @@ class RCubicScriptParser(object):
         # Check for undefined resources
         if len(self.unusedresources) > 0:
             logging.warning(
-                    "Resources referenced but not defined: {0}."
-                    .format(", ".join(self.unusedresources))
+                "Resources referenced but not defined: {0}."
+                .format(", ".join(self.unusedresources))
             )
 
         # Initialize and set up dependencies
