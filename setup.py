@@ -22,11 +22,12 @@
 #OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 #THE SOFTWARE.
 
+from setuptools import setup
 
-from distutils.core import setup
-from distutils.command.install import INSTALL_SCHEMES
-for scheme in INSTALL_SCHEMES.values():
-    scheme['data'] = scheme['purelib']
+#from distutils.core import setup
+#from distutils.command.install import INSTALL_SCHEMES
+#for scheme in INSTALL_SCHEMES.values():
+#   scheme['data'] = scheme['purelib']
 
 setup(name='RCubic',
       version='1.2',
