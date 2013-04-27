@@ -309,12 +309,7 @@ class ExecJob(object):
         Used to check if job is connected to tree
         """
         # caching results will peformance
-        for parent in self.parents():
-            if parent.is_defined():
-                return True
-            elif parent.has_defined_anscestors():
-                return True
-        return False
+        return any(parent.is_defined() or parent.has_defined_anscestors() for parent in self.parents())
 
     def parent_deps(self):
         """ Return all jobs which are parents of this job """
@@ -1180,10 +1175,7 @@ class ExecTree(object):
 
     def is_success(self):
         """ True if all the jobs in tree have successfully executed """
-        for job in self.jobs:
-            if not job.is_success():
-                return False
-        return True
+        return all(job.is_success() for job in self.jobs)
 
     def cancel(self):
         # TODO break cancel into cancel and abort, cancel should be called externally we do want to kill off jobs without leaving cancel metadata all over the place
