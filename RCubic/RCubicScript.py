@@ -196,7 +196,7 @@ class RCubicScriptParser(object):
                     logging.debug(
                                     "Skipping {0}/{1}, does not start with {2}_."
                                     .format(filepath, group)
-                            )
+                    )
 
     def _glob_expand(self, deps):
         rval = []
