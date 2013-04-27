@@ -662,8 +662,8 @@ class ExecResource(object):
                         if self.event.wait(1):
                             self.event.clear()
                     self.used += 1
-                except gevent.timeout, timeout:
-                    if tobject != timeout:
+                except gevent.timeout as gtimeout:
+                    if tobject != gtimeout:
                         raise
                     return False
 
