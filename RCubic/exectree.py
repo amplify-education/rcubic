@@ -267,7 +267,7 @@ class ExecJob(object):
             "color": self.tcolor,
             "penwidth": "3",
             "fontname": font,
-            }
+        }
         if self.href:
             kw["href"] = '"{0}"'.format(self.href)
         node = pydot.Node(label, **kw)
@@ -278,7 +278,7 @@ class ExecJob(object):
                 self.subtree.cluster_name,
                 color="deepskyblue",
                 fontname=font
-            )
+        )
         if self.subtree.iterator is None:
             subg.set_label(self.name)
         else:
@@ -512,7 +512,7 @@ class ExecJob(object):
         if self.state == self.STATE_UNDEF and self.orphan():
             logging.debug("{0} is short circuiting ({1})".format(
                     self.name, self.state
-                )
+            )
             )
             self.events[self.STATE_RUNNING].set()
             self.events[self.STATE_SUCCESSFULL].set()
@@ -806,7 +806,7 @@ class ExecTree(object):
                         ({0}:{1}).".format(
                             legenditem.base,
                             legenditem.sourceline
-                        )
+                    )
                     )
                     raise
 
@@ -868,7 +868,7 @@ class ExecTree(object):
         rval = [
             n for n in self.jobs
             if fnmatch.fnmatchcase(n.name, needle) or n.name.uuid.hex == needle
-            ]
+        ]
         return rval or default or []
 
     def find_job(self, needle, default=None):
