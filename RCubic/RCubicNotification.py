@@ -37,7 +37,7 @@ class RCubicNotification(object):
     def __init__(
             self, emailfrom='rcubic@example.com', subject='rcubic:',
             server='localhost', carboncopy=''
-        ):
+    ):
         self.email = {}
         self.enabled = True
         self.emailfrom = emailfrom
