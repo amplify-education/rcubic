@@ -1020,8 +1020,7 @@ class ExecTree(object):
     def json_status(self, status=None):
         """ Return json string representing state of jobs.
         Can be used to update graph SVG through javascript"""
-        if status is None:
-            status = {}
+        status = status or {}
         for job in self.all_jobs_gen():
             status[job.name] = {
                 "status": job.STATE_COLORS[job.state],
