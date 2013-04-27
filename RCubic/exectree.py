@@ -651,8 +651,7 @@ class ExecResource(object):
             "uuid": str(self.uuid.hex),
             "avail": str(self.avail),
         }
-        eri = et.Element("execResource", args)
-        return eri
+        return et.Element("execResource", args)
 
     def reserve(self, blocking=True, timeout=None):
         """ Acquire reservation of ExecResource object
