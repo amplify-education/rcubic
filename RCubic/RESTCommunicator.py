@@ -115,10 +115,7 @@ class RESTCommunicator(RESTServer):
         """
         feature = post['feature']
         start_response(responseCodes[200], responseTypes['plaintext'])
-        if feature in self.features:
-            return str(True)
-        else:
-            return str(False)
+        return str(feature in self.features)
 
     def _cancel(self, env, start_response, post):
         """Responds to a 'cancel' request and calls rcubic.abort()
