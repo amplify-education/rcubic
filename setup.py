@@ -51,7 +51,7 @@ setup(
     packages = ['RCubic'],
     # Command line scripts
     scripts = [
-        'bin/rcubic', 'bin/rcubic-cli', 'bin/rcubic-checkin','bin/rcubic-migratedb'
+        'bin/rcubic', 'bin/rcubic-cli', 'bin/rcubic-checkin', 'bin/rcubic-migratedb'
         ],
     # Config files
     data_files = [
