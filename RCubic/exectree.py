@@ -436,8 +436,8 @@ class ExecJob(object):
 
     def reset(self):
         """ Prepares jobs to be executed again """
-        for key in self.events.iterkeys():
-            self.events[key].clear()
+        for event in self.events.values():
+            event.clear()
         if self.progress > 0:
             self.progress = 0
         self.state = self.STATE_RESET
@@ -1200,7 +1200,7 @@ class ExecTree(object):
             return
         logging.debug("About to spin up jobs for {0}".format(self.name))
         for job in self.jobs:
-            for ek, ev in job.events.items():
+            for ev in job.events.values():
                 ev.rawlink(self._is_done_event)
             job.start()
         self.started = True
