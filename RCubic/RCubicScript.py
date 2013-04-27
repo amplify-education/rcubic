@@ -71,10 +71,7 @@ class RCubicScript(object):
         fieldre = re.compile(r"^[\s]*#%s:.*$" % (field), re.MULTILINE)
         begin = re.compile(r"^#[A-Z0-9]+:[\s]*")
         line = fieldre.search(script)
-        if line:
-            return begin.sub("", line.group(0), 1)
-        else:
-            return default
+        return begin.sub("", line.group(0), 1) if line else default
 
     def _param_split(self, param):
         val = []
