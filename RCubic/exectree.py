@@ -327,7 +327,7 @@ class ExecJob(object):
 
     def orphan(self):
         """ True if job has no parents """
-        return len(self.parent_deps()) <= 0
+        return not self.parent_deps()
 
     def validate(self, prepend=""):
         """ Ensure job can perform what is required of it at execution """
