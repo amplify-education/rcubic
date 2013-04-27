@@ -59,7 +59,7 @@ class RESTCommunicator(RESTServer):
         env -- expects a 'data' list TODO: paramaters
 
         """
-        logging.debug("Received Progress report for %s: %s" % (post['scriptName'], post['message']))
+        logging.debug("Received Progress report for {0}: {1}".format(post['scriptName'], post['message']))
         resp = self.rcubic.updateProgress(post['scriptName'], post['message'])
         start_response(responseCodes[200], responseTypes['plaintext'])
         return str(resp)
@@ -84,11 +84,11 @@ class RESTCommunicator(RESTServer):
 
         """
         scriptName = post['scriptName']
-        logging.info("Received reschedule request for %s." % scriptName)
+        logging.info("Received reschedule request for {0}.".format(scriptName))
         resp = self.rcubic.reschedule(scriptName)
         start_response(responseCodes[200], responseTypes['plaintext'])
         if not resp:
-            logging.warning("Reschedule request for %s failed." % post['scriptName'])
+            logging.warning("Reschedule request for {0} failed.".format(post['scriptName']))
         return str(bool(resp))
 
     def _manualOverride(self, env, start_response, post):
@@ -99,11 +99,11 @@ class RESTCommunicator(RESTServer):
 
         """
         scriptName = post['scriptName']
-        logging.info("Received override request for %s." % scriptName)
+        logging.info("Received override request for {0}.".format(scriptName))
         resp = self.rcubic.manualOverride(scriptName)
         start_response(responseCodes[200], responseTypes['plaintext'])
         if not resp:
-            logging.warning("Override request for %s failed." % scriptName)
+            logging.warning("Override request for {0} failed.".format(scriptName))
         return str(bool(resp))
 
     def _supported(self, env, start_response, post):
