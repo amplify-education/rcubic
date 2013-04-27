@@ -157,9 +157,7 @@ class ExecJob(object):
         else:
             uuidi = uuid.uuid4()
 
-        self.events = {}
-        for e in self.STATES:
-            self.events[e] = gevent.event.Event()
+        self.events = dict((e, gevent.event.Event()) for e in self.STATES)
         self.statechange = gevent.event.Event()
         self.name = name
         self.uuid = uuidi
@@ -1097,22 +1095,17 @@ class ExecTree(object):
 
         WARNING This will not find stem of subtrees with cycles
         """
-        stems = []
-        for job in self.jobs:
-            if job.has_defined_anscestors() or not job.is_defined():
-                continue
-            stems.append(job)
-        return stems
+        return [
+            job
+            for job in self.jobs
+            if not job.has_defined_anscestors() and job.is_defined()
+        ]
 
     def leaves(self):
         """
         Finds and returns all the leaf jobs of a tree
         """
-        leaves = []
-        for job in self.jobs:
-            if len(job.child_deps()) > 0:
-                leaves.append(job)
-        return leaves
+        return [job for job in self.jobs if job.child_deps()]
 
     def validate(self):
         """ Check that job is i connected DAG, and all jobs are executable """
@@ -1140,10 +1133,7 @@ class ExecTree(object):
                 errors.append("Tree {0} has cycles.".format(self.name))
 
             # What jobs are not connected to stem?
-            unconnected = []
-            for job in self.jobs:
-                if job.is_defined() and job not in visited:
-                    unconnected.append(job)
+            unconnected = [job for job in self.jobs if job.is_defined() and job not in visited]
             if len(unconnected) > 0:
                 errors.append(
                     "The jobs {0} are not connected to {1}."
