@@ -134,7 +134,7 @@ class RCubicGroup(object):
 
     def add_script(self, rs, override=False):
         if override:
-            logging.debug("{0} is being overriden by {1}".format(rs.name, rs.path))
+            logging.debug("{0} is being overridden by {1}".format(rs.name, rs.path))
             for script in self.scripts:
                 if script.name == rs.name:
                     self.scripts.remove(script)
