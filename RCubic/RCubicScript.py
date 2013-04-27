@@ -68,8 +68,8 @@ class RCubicScript(object):
             self.path = "-"
 
     def _get_param(self, script, field, default=None):
-        fieldre = re.compile("^#%s:.*$" % (field), re.MULTILINE)
-        begin = re.compile("^#[A-Z0-9]+:[\s]*")
+        fieldre = re.compile(r"^[\s]*#%s:.*$" % (field), re.MULTILINE)
+        begin = re.compile(r"^#[A-Z0-9]+:[\s]*")
         line = fieldre.search(script)
         if line:
             return begin.sub("", line.group(0), 1)
@@ -79,16 +79,16 @@ class RCubicScript(object):
     def _param_split(self, param):
         val = []
         if param is not None:
-            seperator = re.compile("[,;\s]+")
-            val = seperator.split(param)
+            separator = re.compile("[,;\s]+")
+            val = separator.split(param)
             while "" in val:
                 val.remove("")
         return val
 
     def _parseHeaderLine(self, line):
-        begin = re.compile("^#[A-Z0-9]+:[\s]*")
-        seperator = re.compile("[,;\s]+")
-        retVal = seperator.split(begin.sub("", line, 1))
+        begin = re.compile(r"^#[A-Z0-9]+:[\s]*")
+        separator = re.compile(r"[,;\s]+")
+        retVal = separator.split(begin.sub("", line, 1))
         while True:
             try:
                 retVal.remove("")
@@ -246,8 +246,10 @@ class RCubicScriptParser(object):
             else:
                 p = subprocess.Popen(script.iterator, stdout=subprocess.PIPE, stderr=devnull, cwd=self.workdir)
                 output = p.communicate()[0]
-        seperator = re.compile("[,;\s]+")
-        args = seperator.split(output)
+
+        # Split output by delimiters, eliminate empty strings
+        separator = re.compile(r"[,;\s]+")
+        args = separator.split(output)
         while "" in args:
             args.remove("")
         logging.debug("Arguments {0}".format(args))
