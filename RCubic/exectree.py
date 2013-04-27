@@ -196,18 +196,11 @@ class ExecJob(object):
         args["logfile"] = self.logfile or ""
         eti = et.Element("execJob", args)
 
-        if self.arguments is not None:
-            for arg in self.arguments:
-                eti.append(et.Element("execArg", {"value": arg}))
+        for arg in (self.arguments or []):
+            eti.append(et.Element("execArg", {"value": arg}))
 
-        if self.resources is not None:
-            for resource in self.resources:
-                eti.append(
-                    et.Element(
-                        "execResource",
-                        {"uuid": str(resource.uuid.hex)}
-                    )
-                )
+        for resource in (self.resources or []):
+            eti.append(et.Element("execResource", {"uuid": str(resource.uuid.hex)}))
 
         return eti
 
