@@ -44,6 +44,14 @@ class FatalRuntimeError(RuntimeError):
     pass
 
 
+class ConfigurationError(Exception):
+    def __init__(self, value):
+        self.value = value
+
+    def __str__(self):
+        return repr(self.value)
+
+
 def dict_by_attr(series, name):
     a = attrgetter(name)
     return dict((a(item), item) for item in series)
