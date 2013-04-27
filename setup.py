@@ -29,6 +29,7 @@ from setuptools import setup
 #for scheme in INSTALL_SCHEMES.values():
 #   scheme['data'] = scheme['purelib']
 
+
 def reqs_from_file(filename):
     with open(filename) as f:
         lineiter = (line.rstrip() for line in f if '==' in line and not line.startswith('#'))
