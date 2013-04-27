@@ -1111,10 +1111,7 @@ class ExecTree(object):
         """ True if all jobs in tree have completed execution """
         for job in self.jobs:
             if job.mustcomplete:
-                if (not self.cancelled
-                   and self.waitsuccess
-                   and not job.is_success()
-                        ):
+                if (not self.cancelled and self.waitsuccess and not job.is_success()):
                     logging.debug("{0} is not successfull".format(job.name))
                     return False
                 if not job.is_done():
