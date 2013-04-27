@@ -682,13 +682,9 @@ class ExecResource(object):
 
     def release(self):
         """ Release a previously acquired resource """
-        if self.avail < 0:
-            return
-        if self.used <= 0:
-            self.used = 0
-        else:
-            self.used -= 1
-        self.event.set()
+        if self.avail >= 0:
+            self.used = max(0, self.used - 1)
+            self.event.set()
 
 
 class ExecDependency(object):
