@@ -1097,7 +1097,7 @@ class ExecTree(object):
 
     # dot's html map output is: "x,y x,y x,y"
     # but it should be: "x,y,x,y,x,y"
-    FIXCOORD = re.compile(' (?=[\d]*,[\d]*)')
+    FIXCOORD = re.compile(r' (?=[\d]*,[\d]*)')
 
     def write_status(self, svg, json, overwrite=False, arborescent=True):
         """Write a SVG and and JSON files containing graph data and state of

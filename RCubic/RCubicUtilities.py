@@ -190,9 +190,9 @@ class LogToDB(object):
         #-1 b greater
         # 0 same
         # 1 a greater
-        alphas = re.compile("[a-zA-Z]")
-        rev = re.compile("[-_~]")
-        dots = re.compile("[.,]")
+        alphas = re.compile(r"[a-zA-Z]")
+        rev = re.compile(r"[-_~]")
+        dots = re.compile(r"[.,]")
 
         a = re.sub(alphas, "", a)
         a = rev.split(a, 1)
