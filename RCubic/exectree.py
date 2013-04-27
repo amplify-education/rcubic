@@ -571,10 +571,7 @@ class ExecJob(object):
             elif self.subtree is not None:
                 logging.debug("starting {0} {1}".format(self.name, "subtree"))
                 self.subtree.iterrun()
-                if self.subtree.is_success():
-                    rcode = 0
-                else:
-                    rcode = 1
+                rcode = int(not self.subtree.is_success())
             else:
                 logging.error("Hit unhandled start state for {0}.".format(self.name))
             logging.debug("finished {0} status {1}.".format(self.name, rcode))
