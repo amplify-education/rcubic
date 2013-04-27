@@ -55,8 +55,8 @@ setup(
         ],
     # Config files
     data_files = [
-        ('RCubic/', [ "RCubic/rcubic.xml.template" ]),
-        ('RCubic/web/', [ "RCubic/web/index.html" ]),
+        ('RCubic/', ["RCubic/rcubic.xml.template" ]),
+        ('RCubic/web/', ["RCubic/web/index.html" ]),
         ('RCubic/web/archive/', ["RCubic/web/archive/index.html"]),
         ('RCubic/web/', [
             "RCubic/web/index.html",
