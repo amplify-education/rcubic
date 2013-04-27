@@ -845,10 +845,7 @@ class ExecTree(object):
         return "<ExecTree {0}>".format(self.name)
 
     def __getitem__(self, key, default=None):
-        for job in self.jobs:
-            if job.name == key:
-                return job
-        return default
+        return dict_by_attr(self.jobs, 'name').get(key, default)
 
     def trees(self):
         """Generate all trees one by one"""
@@ -865,12 +862,8 @@ class ExecTree(object):
                 return resource
         return default
 
-    def find_subtree(self, uuid_needle, default=None):
-        """ Find all subtrees by uuid """
-        for subtree in self.subtrees:
-            if subtree.uuid == uuid_needle:
-                return subtree
-        return default
+    def find_subtree(self, uuid, default=None):
+        return dict_by_attr(self.subtrees, 'uuid').get(uuid, default)
 
     def find_jobs(self, needle, default=None):
         """ Find all jobs based on their name / uuid """
