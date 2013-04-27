@@ -28,14 +28,10 @@ import fnmatch
 import subprocess
 
 from RCubic import exectree
-
-
-class ConfigurationError(Exception):
-    pass
+from RCubic.RCubicUtilities import ConfigurationError
 
 
 class RCubicScript(object):
-
     def __init__(self, filepath, version, override, phase, logdir, whitelist, blacklist, regexval, group):
         self.path = filepath
         self.name = filepath.split("/")[-1]
