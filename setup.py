@@ -37,24 +37,24 @@ def reqs_from_file(filename):
 
 
 setup(
-    name = 'RCubic',
-    version = '1.1',
-    description = 'RCubic',
+    name='RCubic',
+    version='1.1',
+    description='RCubic',
     # Required packages
     # requires = ['MiniREST', 'lxml', 'simplejson', 'pydot', 'gevent'],
-    install_requires = reqs_from_file('requirements.txt'),
-    tests_require = reqs_from_file('test-requirements.txt'),
+    install_requires=reqs_from_file('requirements.txt'),
+    tests_require=reqs_from_file('test-requirements.txt'),
     # List what we provide and obolete for updates
-    provides = ['RCubic'],
-    obsoletes = ['RCubic'],
+    provides=['RCubic'],
+    obsoletes=['RCubic'],
     # Main packages
-    packages = ['RCubic'],
+    packages=['RCubic'],
     # Command line scripts
-    scripts = [
+    scripts=[
         'bin/rcubic', 'bin/rcubic-cli', 'bin/rcubic-checkin', 'bin/rcubic-migratedb'
         ],
     # Config files
-    data_files = [
+    data_files=[
         ('RCubic/', ["RCubic/rcubic.xml.template"]),
         ('RCubic/web/', ["RCubic/web/index.html"]),
         ('RCubic/web/archive/', ["RCubic/web/archive/index.html"]),
