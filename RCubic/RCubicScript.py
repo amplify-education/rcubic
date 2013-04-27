@@ -74,24 +74,17 @@ class RCubicScript(object):
         return begin.sub("", line.group(0), 1) if line else default
 
     def _param_split(self, param):
-        val = []
-        if param is not None:
-            separator = re.compile("[,;\s]+")
-            val = separator.split(param)
-            while "" in val:
-                val.remove("")
-        return val
+        # Warning: code change not covered in tests
+        # Split output by delimiters, eliminate empty strings
+        separator = re.compile(r"[,;\s]+")
+        return filter(None, separator.split(param)) if param else []
 
     def _parseHeaderLine(self, line):
+        # Warning: code change not covered in tests
+        # Split output by delimiters, eliminate empty strings
         begin = re.compile(r"^#[A-Z0-9]+:[\s]*")
         separator = re.compile(r"[,;\s]+")
-        retVal = separator.split(begin.sub("", line, 1))
-        while True:
-            try:
-                retVal.remove("")
-            except ValueError:
-                break
-        return retVal
+        return filter(None, separator.split(begin.sub("", line, 1)))
 
 
 class RCubicGroup(object):
@@ -246,9 +239,8 @@ class RCubicScriptParser(object):
 
         # Split output by delimiters, eliminate empty strings
         separator = re.compile(r"[,;\s]+")
-        args = separator.split(output)
-        while "" in args:
-            args.remove("")
+        args = filter(None, separator.split(output))
+
         logging.debug("Arguments {0}".format(args))
         return args
 
