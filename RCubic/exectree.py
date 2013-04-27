@@ -105,8 +105,8 @@ class ExecJob(object):
     }
 
     def __init__(self, name="", jobpath=None, tree=None, logfile=None,
-            xml=None, execiter=None, mustcomplete=True, subtree=None,
-            arguments=None, resources=None, href="", tcolor="lavender"):
+                 xml=None, execiter=None, mustcomplete=True, subtree=None,
+                 arguments=None, resources=None, href="", tcolor="lavender"):
         arguments = arguments or []
         resources = resources or []
         if xml is not None:
@@ -380,7 +380,7 @@ class ExecJob(object):
 
     @staticmethod
     def _popen(args, data='', stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT, cwd=None):
+               stderr=subprocess.STDOUT, cwd=None):
         """Communicate with the process non-blockingly.
         http://code.google.com/p/gevent/source/browse/examples/processes.py?r=2
         3469225e58196aeb89393ede697e6d11d88844b
@@ -898,7 +898,7 @@ class ExecTree(object):
         self.jobs.append(job)
 
     def add_dep(self, parent=None, child=None,
-            state=ExecJob.STATE_SUCCESSFULL, xml=None):
+                state=ExecJob.STATE_SUCCESSFULL, xml=None):
         """Add a dependency between 2 jobs that have been previously added
         to tree"""
         colors = None
@@ -940,7 +940,7 @@ class ExecTree(object):
 
         if parent is child:
             raise DependencyError("Child cannot be own parent ({0})."
-                .format(parent.name)
+                                  .format(parent.name)
             )
 
         if parent not in child.parents():
