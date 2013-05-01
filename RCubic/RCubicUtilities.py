@@ -29,9 +29,11 @@ import re
 import errno
 import fcntl
 import sqlite3
-import gevent
 import logging
-from gevent import (event, server, socket)
+from operator import attrgetter
+
+import gevent
+from gevent import socket
 
 
 class VersionCompareError(Exception):
@@ -40,6 +42,19 @@ class VersionCompareError(Exception):
 
 class FatalRuntimeError(RuntimeError):
     pass
+
+
+class ConfigurationError(Exception):
+    def __init__(self, value):
+        self.value = value
+
+    def __str__(self):
+        return repr(self.value)
+
+
+def dict_by_attr(series, name):
+    a = attrgetter(name)
+    return dict((a(item), item) for item in series)
 
 
 def popenNonblock(args, data='', stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, cwd=None, logFile=None):
@@ -101,7 +116,6 @@ def popenNonblock(args, data='', stdin=subprocess.PIPE, stdout=subprocess.PIPE, 
 
 
 class LogToDB(object):
-
     def __init__(self, dbPath):
         self.dbPath = dbPath
         newdb = (not os.path.exists(self.dbPath))
@@ -115,11 +129,11 @@ class LogToDB(object):
     def _initDB(self, conn):
         # TODO does githead have to be in primary key?
         query = "CREATE TABLE events (time integer, groupe text, version text, githead text, job text, status text, " \
-                                " PRIMARY KEY (time, groupe, job, status))"
+            " PRIMARY KEY (time, groupe, job, status))"
         self.conn.execute(query)
         query = "CREATE TABLE latest_events (time integer, groupe text, version text, githead text, job text, status text, " \
-                                " FOREIGN KEY (time, groupe, job, status) REFERENCES event(time, groupe, job, status), " \
-                                " UNIQUE (groupe, job))"
+            " FOREIGN KEY (time, groupe, job, status) REFERENCES event(time, groupe, job, status), " \
+            " UNIQUE (groupe, job))"
         self.conn.execute(query)
         query = "CREATE TABLE rcubic_db_support(db_version text unique)"
         self.conn.execute(query)
@@ -151,8 +165,8 @@ class LogToDB(object):
                 return self.verComp(version, rows[0][0]) > 0
             except VersionCompareError:
                 logging.warning(
-                        "Versions ({0}, {1}) cannot be compared due to format error for group {2}."
-                        .format(version, rows[0][0], group)
+                    "Versions ({0}, {1}) cannot be compared due to format error for group {2}."
+                    .format(version, rows[0][0], group)
                 )
                 return True
         else:
@@ -190,9 +204,9 @@ class LogToDB(object):
         #-1 b greater
         # 0 same
         # 1 a greater
-        alphas = re.compile("[a-zA-Z]")
-        rev = re.compile("[-_~]")
-        dots = re.compile("[.,]")
+        alphas = re.compile(r"[a-zA-Z]")
+        rev = re.compile(r"[-_~]")
+        dots = re.compile(r"[.,]")
 
         a = re.sub(alphas, "", a)
         a = rev.split(a, 1)

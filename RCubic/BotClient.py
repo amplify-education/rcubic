@@ -27,7 +27,6 @@ from gevent import event
 
 
 class BotClient(RESTClient):
-
     """Extends the RESTClient class to provide an interface to a BotServer
 
     """
@@ -76,13 +75,20 @@ class BotClient(RESTClient):
 
         """
         events = []
+        data = {
+            "checkInName": checkInName,
+            "message": message,
+            "room": room,
+            'callbackPort': port,
+            "token": self.token
+        }
 
         # If anyuser can check in for the given room
         if anyuser and room:
             ev = event.Event()
             self.restserver.registerCheckIn(room, checkInName, ev)
             events.append(ev)
-            self.getResponse("requestRoomCheckIn", data={"checkInName": checkInName, "message": message, "room": room, 'callbackPort': port, "token": self.token}, *args, **kwargs)
+            self.getResponse("requestRoomCheckIn", data=data, *args, **kwargs)
         else:
             # Go through all users and parse for pm or room
             for user in users:
@@ -94,18 +100,17 @@ class BotClient(RESTClient):
                     user = user + '@' + server
                 self.restserver.registerCheckIn(user, checkInName, ev)
                 if not room:
-                    self.getResponse("requestUserCheckIn", data={"users": [user], "checkInName": checkInName, "message": message, "room": room, "callbackPort": port, "token": self.token}, *args, **kwargs)
+                    data["users"] = [user]
+                    self.getResponse("requestUserCheckIn", data=data, *args, **kwargs)
             if room:
-                self.getResponse("requestUserCheckIn", data={"users": users, "checkInName": checkInName, "message": message, "room": room, 'callbackPort': port, "token": self.token}, *args, **kwargs)
+                data["users"] = users
+                self.getResponse("requestUserCheckIn", data=data, *args, **kwargs)
         tasks = [gevent.spawn(self.waitForEvent, eve) for eve in events]
         # Wait for all check ins or timeout
         gevent.joinall(tasks, timeout=timeout)
         # Assume everyone checked in, and see if someone didn't
         # (meaning we timed out)
-        ret = True
-        for eve in events:
-            if not eve.isSet():
-                ret = False
+        ret = all(eve.isSet() for eve in events)
         # Remove pongs from waiting
         self.restserver.unRegisterCheckIn(checkInName)
         return ret

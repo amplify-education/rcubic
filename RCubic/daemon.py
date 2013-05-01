@@ -12,7 +12,6 @@ from signal import SIGTERM
 
 
 class Daemon:
-
     """
     A generic daemon class.
 
@@ -144,3 +143,4 @@ class Daemon:
         You should override this method when you subclass Daemon. It will be called after the process has been
         daemonized by start() or restart().
         """
+        pass
