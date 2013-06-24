@@ -427,12 +427,13 @@ class ExecJob(object):
 
     def reset(self):
         """ Prepares jobs to be executed again """
-        for event in self.events.values():
-            event.clear()
-        if self.progress > 0:
-            self.progress = 0
-        self.state = self.STATE_RESET
-        logging.debug("job {0} has been reset.".format(self.name))
+        if self.state != self.STATE_UNDEF:
+            for event in self.events.values():
+                event.clear()
+            if self.progress > 0:
+                self.progress = 0
+            self.state = self.STATE_RESET
+            logging.debug("job {0} has been reset.".format(self.name))
 
     def cancel(self):
         """Mark job as cancelled
@@ -519,7 +520,7 @@ class ExecJob(object):
         self._parent_wait()
 
         if self.state == self.STATE_UNDEF:
-            logging.debug("{} has nothing to do.".format(self.name))
+            logging.debug("{0} has nothing to do.".format(self.name))
             self.events[self.STATE_RUNNING].set()
             self.events[self.STATE_SUCCESSFULL].set()
             return True

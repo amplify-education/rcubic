@@ -358,10 +358,10 @@ class TestET(unittest.TestCase):
         with gevent.Timeout(30):
             runreturn = self.tree.run()
 
-        logging.debug("ljob1.state: {}".format(self.ljob1.state))
+        logging.debug("ljob1.state: {0}".format(self.ljob1.state))
         self.assertTrue(self.ljob1.is_success())
         self.assertTrue(self.ljob2.is_cancelled())
-        logging.debug("job4.state: {}".format(self.job4.state))
+        logging.debug("job4.state: {0}".format(self.job4.state))
         self.assertTrue(self.job4.is_failed())
         self.assertTrue(self.job5.is_cancelled())
         self.assertTrue(self.job3.is_success())
@@ -377,12 +377,29 @@ class TestET(unittest.TestCase):
         with gevent.Timeout(30):
             runreturn = self.tree.run()
 
-        logging.debug("ljob1.state: {}".format(self.ljob1.state))
+        logging.debug("ljob1.state: {0}".format(self.ljob1.state))
         self.assertTrue(self.ljob1.is_cancelled())
         self.assertTrue(self.ljob2.is_cancelled())
-        logging.debug("job4.state: {}".format(self.job4.state))
+        logging.debug("job4.state: {0}".format(self.job4.state))
         self.assertTrue(self.job4.is_cancelled())
         self.assertTrue(self.ltree.cancelled)
+
+    def test_treetarator_undef_job(self):
+        """Make sure undef job does not get re-activated during tree
+        execution"""
+        self._test_treetarator_init()
+
+        self.ljob_undef = self._newjob("sot", self.ltree, vexec=False)
+        self.ljob_undef.jobpath = self.ljob_undef.UNDEF_JOB
+        self.ltree.add_dep(self.ljob2, self.ljob_undef)
+        logging.debug("State of undef job before is {0}".format(self.ljob_undef.state))
+
+        with gevent.Timeout(30):
+            runreturn = self.tree.run()
+
+        logging.debug("State of undef job after is {0}".format(self.ljob_undef.state))
+        self.assertTrue(self.ljob_undef.state == self.ljob_undef.STATE_UNDEF)
+
 
     def test_resource_validation(self):
         """Resource validation"""
