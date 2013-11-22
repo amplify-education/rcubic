@@ -22,12 +22,12 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 
-from setuptools import setup
+# from setuptools import setup
 
-# from distutils.core import setup
-# from distutils.command.install import INSTALL_SCHEMES
-# for scheme in INSTALL_SCHEMES.values():
-#   scheme['data'] = scheme['purelib']
+from distutils.core import setup
+from distutils.command.install import INSTALL_SCHEMES
+for scheme in INSTALL_SCHEMES.values():
+    scheme['data'] = scheme['purelib']
 
 
 def reqs_from_file(filename):
@@ -41,9 +41,9 @@ setup(
     version='1.3',
     description='RCubic',
     # Required packages
-    # requires = ['MiniREST', 'lxml', 'simplejson', 'pydot', 'gevent'],
-    install_requires=reqs_from_file('requirements.txt'),
-    tests_require=reqs_from_file('test-requirements.txt'),
+    requires = ['MiniREST', 'lxml', 'simplejson', 'pydot', 'gevent'],
+    # install_requires=reqs_from_file('requirements.txt'),
+    # tests_require=reqs_from_file('test-requirements.txt'),
     # List what we provide and obolete for updates
     provides=['RCubic'],
     obsoletes=['RCubic'],
