@@ -38,7 +38,7 @@ def reqs_from_file(filename):
 
 setup(
     name='RCubic',
-    version='1.1',
+    version='1.3',
     description='RCubic',
     # Required packages
     # requires = ['MiniREST', 'lxml', 'simplejson', 'pydot', 'gevent'],
