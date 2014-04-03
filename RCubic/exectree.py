@@ -454,17 +454,18 @@ class ExecJob(object):
         for r in resources:
             r.release()
 
-    def _acquire_resources(self, acquire_timeout=60, max_attempts=1000):
+    def _acquire_resources(self, max_attempts=1000):
         if len(self.resources) < 1:
             return True
         self.state = self.STATE_BLOCKED
         reserved = []
         lastacquire = False
-        backofftime = len(self.resources) * acquire_timeout
+        min_timeout = min(resource.reserve_timeout for resource in self.resources)
+        backofftime = len(self.resources) * min_timeout
         attempt = 0
         while True:
             for resource in self.resources:
-                if resource.reserve(timeout=acquire_timeout):
+                if resource.reserve():
                     reserved.append(resource)
                     lastacquire = True
                 else:
@@ -473,7 +474,7 @@ class ExecJob(object):
             if not lastacquire:
                 attempt += 1
                 self._release_resources(reserved)
-                gevent.sleep(backofftime + random.randint(0, acquire_timeout))
+                gevent.sleep(backofftime + random.randint(0, min_timeout))
                 if max_attempts > 0 and attempt >= max_attempts:
                     break
             else:
@@ -617,7 +618,7 @@ class ExecIter(object):
 
 
 class ExecResource(object):
-    def __init__(self, tree, name="", avail=0, xml=None):
+    def __init__(self, tree, name="", avail=0, xml=None, reserve_timeout=60):
         if xml is not None:
             if xml.tag != "execResource":
                 raise XMLError("Expect to find execResource in xml.")
@@ -631,6 +632,7 @@ class ExecResource(object):
         self.used = 0
         self.event = gevent.event.Event()
         self.uuid = uuidi
+        self.reserve_timeout = reserve_timeout
         tree.resources.append(self)
 
     def __str__(self):
@@ -645,7 +647,7 @@ class ExecResource(object):
         }
         return et.Element("execResource", args)
 
-    def reserve(self, blocking=True, timeout=None):
+    def reserve(self, blocking=True):
         """ Acquire reservation of ExecResource object
 
         Keyword arguments:
@@ -657,13 +659,13 @@ class ExecResource(object):
         if self.used < self.avail:
             self.used += 1
         elif blocking:
-            with gevent.Timeout(timeout) as tobject:
+            with gevent.Timeout(self.reserve_timeout) as tobject:
                 try:
                     while self.used >= self.avail:
                         if self.event.wait(1):
                             self.event.clear()
                     self.used += 1
-                except gevent.timeout as gtimeout:
+                except gevent.timeout.Timeout as gtimeout:
                     if tobject != gtimeout:
                         raise
                     return False

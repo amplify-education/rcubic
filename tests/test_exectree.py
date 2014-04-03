@@ -414,12 +414,14 @@ class TestET(unittest.TestCase):
 
     def test_resource_use(self):
         """Run tree with resources"""
-        resource = exectree.ExecResource(self.tree, "r3", 1)
+        resource = exectree.ExecResource(self.tree, "r3", 1, reserve_timeout=2)
         times = {}
         jobs = [self.job2, self.job3]
+        job_count = 5
+        job_sleep = 4
         i = 0
-        while i < 5:
-            job = self._newjob("pol{0}".format(i), self.tree)
+        while i < job_count:
+            job = self._newjob("pol{0}".format(i), self.tree, maxsleep=job_sleep)
             self.tree.add_dep(self.job1, job)
             jobs.append(job)
             i += 1
@@ -432,7 +434,7 @@ class TestET(unittest.TestCase):
                     self._save_event, times[j], ev
                 )
                 j.events[ev].rawlink(save_event_handler)
-        with gevent.Timeout(30):
+        with gevent.Timeout(job_count * job_sleep + 20):
             self.tree.run()
         self.assertTrue(self.tree.is_done())
         self.assertTrue(self.tree.is_success())
