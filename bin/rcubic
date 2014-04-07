@@ -126,11 +126,10 @@ class Rcubic(object):
 		self.rsp.read_dirs(self.scriptOverrideDir, True)
 		self.rsp.set_href(self.config["gerritURL"], self.config["gerritProject"], self.gitHead, self.gitDir)
 
-		self.tree = self.rsp.init_tree()
+		self.tree = self.rsp.init_tree(waitsuccess=not self.opts.sessionMode)
 		self.tree.legend["time"] = time.strftime("%Y-%m-%d %H:%M:%S")
 		self.tree.legend["version"] = self.opts.release
 		self.tree.legend["environment"] = self.environment
-		self.tree.waitsuccess = not self.opts.sessionMode
 
 		for script in self.rsp.scripts():
 			for e in script.job.DONE_STATES:

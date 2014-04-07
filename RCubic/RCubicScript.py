@@ -1,4 +1,4 @@
-# vim: ts=4 noet filetype=python
+# vim: ts=4 et filetype=python
 # This file is part of RCubic
 #
 # Copyright (c) 2012 Wireless Generation, Inc.
@@ -235,10 +235,11 @@ class RCubicScriptParser(object):
                 gerrit, project, script.path[len(repopath) + 1:], githash
             )
 
-    def init_tree(self):
+    def init_tree(self, waitsuccess):
         self.tree = exectree.ExecTree()
         self.tree.cwd = self.workdir
         self.tree.name = "rcubic"
+        self.tree.waitsuccess = waitsuccess
 
         # Initialize all sub trees
         for script in self.scripts():
@@ -246,6 +247,7 @@ class RCubicScriptParser(object):
                 tree = exectree.ExecTree()
                 tree.cwd = self.workdir
                 tree.name = script.name
+                tree.waitsuccess = waitsuccess
                 tree.iterator = exectree.ExecIter(
                     "{0}_iter".format(script.name),
                     self.eval_args(script)
