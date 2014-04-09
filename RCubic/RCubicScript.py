@@ -194,7 +194,7 @@ class RCubicScriptParser(object):
                     group.add_script(rs, override)
                 else:
                     logging.debug(
-                        "Skipping {0}/{1}, does not start with {2}_."
+                        "Skipping {0}/{1}, does not start with {1}_."
                         .format(filepath, group)
                     )
 
